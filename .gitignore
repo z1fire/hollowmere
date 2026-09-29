@@ -1,0 +1,18 @@
+# Android build outputs
+android/.gradle/
+android/build/
+android/app/build/
+android/local.properties
+android/app/src/main/assets/
+*.apk
+*.aab
+# signing keys must never be committed
+*.jks
+*.keystore
+keystore.properties
+# misc
+.DS_Store
+Thumbs.db
+.idea/
+*.iml
+node_modules/
