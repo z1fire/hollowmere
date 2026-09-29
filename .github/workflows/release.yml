@@ -19,43 +19,38 @@ jobs:
           distribution: temurin
           java-version: '17'
 
-      - uses: gradle/actions/setup-gradle@v4
-        with:
-          gradle-version: '8.9'
+      - uses: ./.github/actions/setup-godot
 
       - name: Work out version
         run: |
-          if [[ "$GITHUB_REF" == refs/tags/v* ]]; then V="${GITHUB_REF_NAME#v}"; else V="0.0.${{ github.run_number }}-dev"; fi
+          if [[ "$GITHUB_REF" == refs/tags/v* ]]; then V="${GITHUB_REF_NAME#v}"; else V="0.0.${{ github.run_number }}"; fi
           echo "VNAME=$V" >> "$GITHUB_ENV"
+          sed -i "s/^config\/version=.*/config\/version=\"$V\"/" game/project.godot
+          sed -i "s/^version\/name=.*/version\/name=\"$V\"/; s/^version\/code=.*/version\/code=${{ github.run_number }}/" game/export_presets.cfg
 
-      - name: Bundle the game into the app
-        run: |
-          mkdir -p android/app/src/main/assets
-          rm -rf android/app/src/main/assets/www
-          cp -r web android/app/src/main/assets/www
-          echo "export const VERSION = '$VNAME';" > android/app/src/main/assets/www/js/version.js
-
-      - name: Decode signing key
+      - name: Android SDK paths & signing key
         env:
           KEYSTORE_BASE64: ${{ secrets.KEYSTORE_BASE64 }}
         run: |
-          if [ -n "$KEYSTORE_BASE64" ]; then
-            echo "$KEYSTORE_BASE64" | base64 -d > "$RUNNER_TEMP/release.jks"
-            echo "KEYSTORE_FILE=$RUNNER_TEMP/release.jks" >> "$GITHUB_ENV"
-          else
-            echo "::warning::No KEYSTORE_BASE64 secret - building with the debug key (updates won't install over it)"
-          fi
+          # editor settings tell Godot where the Android SDK and JDK are
+          for f in editor_settings-4.tres editor_settings-4.7.tres; do
+            mkdir -p ~/.config/godot
+            printf '[gd_resource type="EditorSettings" format=3]\n\n[resource]\nexport/android/android_sdk_path = "%s"\nexport/android/java_sdk_path = "%s"\n' "$ANDROID_HOME" "$JAVA_HOME" > ~/.config/godot/$f
+          done
+          echo "$KEYSTORE_BASE64" | base64 -d > "$RUNNER_TEMP/release.jks"
+          echo "GODOT_ANDROID_KEYSTORE_RELEASE_PATH=$RUNNER_TEMP/release.jks" >> "$GITHUB_ENV"
 
-      - name: Build APK
-        working-directory: android
+      - name: Import assets
+        run: godot --headless --path game --import || godot --headless --path game --import
+
+      - name: Export APK
         env:
-          KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
-          KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
-          KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
-        run: gradle assembleRelease --no-daemon -PversionName="$VNAME" -PversionCode=${{ github.run_number }}
-
-      - name: Collect APK
-        run: cp android/app/build/outputs/apk/release/app-release.apk Hollowmere.apk
+          GODOT_ANDROID_KEYSTORE_RELEASE_USER: ${{ secrets.KEY_ALIAS }}
+          GODOT_ANDROID_KEYSTORE_RELEASE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
+        run: |
+          mkdir -p export
+          godot --headless --path game --export-release "Android" "$GITHUB_WORKSPACE/Hollowmere.apk"
+          ls -la Hollowmere.apk
 
       - uses: actions/upload-artifact@v4
         with:

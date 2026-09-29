@@ -34,23 +34,24 @@ See `web/assets/CREDITS.txt`. The optimized assets are produced by `tools/build-
 
 ## 🛠️ Project layout
 
+Hollowmere is built with **[Godot 4.7](https://godotengine.org)** (GDScript, Mobile renderer on Android, Compatibility renderer on the web).
+
 ```
-web/                 The game (plain ES modules + three.js, no build step)
-  js/world.js        terrain, collision, sky, vegetation
-  js/village.js      procedural village + furnished interiors
-  js/wilds.js        goblin camp, graveyard, mine, pond, chests, spawns
-  js/player.js       first-person controller, skills, view model
-  js/entities.js     NPC + enemy AI
-  js/data.js         items, skills, classes, quests, enemies, shops
-  js/assets.js       model/texture loading, batched & LOD'd prop rendering
-  js/characters.js   animated characters (KayKit / Quaternius rigs)
-  assets/            optimized models (.glb, meshopt-compressed) and textures
-tools/               asset pipeline (downloads CC0 sources, compresses, generates LODs)
-android/             Minimal native wrapper (WebView serving the bundled game offline)
-.github/workflows/   release.yml → signed APK + GitHub Release, pages.yml → web version
+game/                    Godot project (open game/project.godot in the Godot editor)
+  scripts/world.gd       terrain, collision, sky & day/night, vegetation
+  scripts/village.gd     procedural village + furnished, enterable buildings
+  scripts/wilds.gd       goblin camp, graveyard, mine, pond, chests, spawns
+  scripts/player.gd      first-person controller, skills & classes, inventory
+  scripts/viewmodel.gd   held weapon in first person
+  scripts/actor.gd       animated characters (shared KayKit rig)
+  scripts/npc.gd, enemy.gd, combat.gd, farm.gd, game.gd, ui.gd, input_ctl.gd, audio.gd
+  scripts/data.gd        items, skills, classes, quests, enemies, shops
+  assets/                models (.glb), PBR textures, fonts
+tools/                   asset pipeline (downloads CC0 sources, optimizes them into game/assets)
+.github/workflows/       release.yml -> signed APK + GitHub Release, pages.yml -> web build
 ```
 
-Run locally: serve the `web/` folder with any static server (e.g. `npx serve web`) and open it in a browser.
+Run it: open `game/project.godot` in Godot 4.7 and press Play (F5).
 
 ## 🚀 Releasing an update
 
@@ -58,6 +59,6 @@ Run locally: serve the `web/` folder with any static server (e.g. `npx serve web
 ./release.sh 0.2.0      # or: git tag v0.2.0 && git push origin v0.2.0
 ```
 
-GitHub Actions builds a signed APK and publishes it as the latest release. Installed apps will see the update the next time they open.
+GitHub Actions exports a signed APK with Godot and publishes it as the latest release. Installed apps will see the update the next time they open.
 
 The signing key lives only in the repository's Actions secrets (`KEYSTORE_BASE64`, `KEYSTORE_PASSWORD`, `KEY_ALIAS`, `KEY_PASSWORD`) and in a local backup. **Keep the backup safe** — without the same key, Android won't install updates over the existing app.

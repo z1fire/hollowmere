@@ -20,3 +20,7 @@ node_modules/
 tools/node_modules/
 tools/.cache/
 tools/measure.json
+
+# Godot
+game/.godot/
+export/

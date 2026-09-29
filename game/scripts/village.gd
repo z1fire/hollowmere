@@ -2,8 +2,8 @@ class_name Village
 extends RefCounted
 ## Procedural village: layout, enterable furnished buildings, farm, plaza, fence & gates.
 
-const DARK := "#8a6a52"
-const MID := "#b89878"
+const DARK := "#c0a080"
+const MID := "#d8bc98"
 const LIGHT := "#d8c0a0"
 const T := 0.3
 const DW := 1.7
@@ -138,10 +138,15 @@ static func plan(W: World) -> void:
 
 
 # ================================================================ build
+static var _shared: MeshBatch
+
+
 static func build(W: World) -> void:
 	var R := U.make_rng(W.seed_value + 23)
+	_shared = MeshBatch.new()
 	for b in W.buildings:
 		_build_building(W, b, R)
+	_add(W, _shared.build(W.mats), "Buildings")
 	_farm_field(W, R)
 	_plaza(W, R)
 	_fence(W, R)
@@ -185,7 +190,7 @@ static func _sign(W: World, text: String, pos: Vector3, yaw: float, width := 1.8
 
 
 static func _build_building(W: World, b: Dictionary, R: RandomNumberGenerator) -> void:
-	var batch := MeshBatch.new()
+	var batch := _shared
 	var ang: float = b.rot * PI / 2.0
 	var B := Builder.at(W, batch, b.x, b.floorY, b.z, ang)
 	var w: float = b.w
@@ -312,7 +317,6 @@ static func _build_building(W: World, b: Dictionary, R: RandomNumberGenerator) -
 		"chapel": _chapel(B, b, R, npc)
 		"house": _house(B, b, R)
 		"farmhouse": _farmhouse(B, b, R, W)
-	_add(W, batch.build(W.mats), "Building_" + b.type)
 
 
 static func _gable_roof(B: Builder, b: Dictionary, wall_key: String, wall_color) -> void:

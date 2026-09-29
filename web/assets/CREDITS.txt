@@ -1,8 +1,0 @@
-Hollowmere uses the following CC0 (public domain) assets. Thank you!
-
-KayKit by Kay Lousberg - www.kaylousberg.com
-  Adventurers Character Pack, Skeletons Character Pack, Dungeon Remastered, Furniture Bits, Halloween Bits
-Quaternius - quaternius.com
-  Ultimate Nature, Crops, Medieval Village, Modular Medieval Buildings, Survival, RPG Items, Animals, Ultimate Monsters
-Poly Haven - polyhaven.com
-  Textures: white_plaster_02, rustic_stone_wall, weathered_plank_siding, old_wood_floor, weathered_planks, reed_roof_03, clay_roof_tiles_02, cobblestone_floor_08, sparse_grass, stony_dirt_path, rocky_terrain_02, forest_leaves_02

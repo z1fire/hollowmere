@@ -223,18 +223,14 @@ static func herbs_and_chests(W: World) -> void:
 		if not W.is_clear(x, z, 2.0):
 			continue
 		var y := W.height_at(x, z)
-		var g := Node3D.new()
-		g.position = Vector3(x, y, z)
+		var hb := MeshBatch.new()
 		for i in 5:
 			var o := Vector3(R.randf_range(-0.2, 0.2), 0, R.randf_range(-0.2, 0.2))
-			var sm := MeshInstance3D.new()
-			sm.mesh = stem_mesh
-			sm.position = o + Vector3(0, 0.2, 0)
-			g.add_child(sm)
-			var pm := MeshInstance3D.new()
-			pm.mesh = petal_mesh
-			pm.position = o + Vector3(0, 0.42, 0)
-			g.add_child(pm)
+			hb.add_arrays("stem", stem_mesh.get_mesh_arrays(), U.xf(o + Vector3(0, 0.2, 0)), Color.WHITE)
+			hb.add_arrays("petal", petal_mesh.get_mesh_arrays(), U.xf(o + Vector3(0, 0.42, 0)), Color.WHITE)
+		var g := hb.build({"stem": stem, "petal": petal}, false)
+		g.position = Vector3(x, y, z)
+		g.visibility_range_end = 90.0
 		W.add_child(g)
 		var it := {"type": "herb", "pos": Vector3(x, y + 0.4, z), "r": 1.8, "label": "Pick Moonpetal", "node": g, "respawn": 0.0}
 		W.herbs.append(it)

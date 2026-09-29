@@ -22,6 +22,7 @@ const KINDS := {
 }
 
 static var _recolor_cache := {}
+static var _merged := {}
 
 var kind := ""
 var def := {}
@@ -40,6 +41,8 @@ func setup(p_kind: String, opts := {}) -> Actor:
 	model = (Assets.chars[def.file] as PackedScene).instantiate()
 	model.scale = Vector3.ONE * def.scale * opts.get("scale", 1.0)
 	add_child(model)
+	if def.rig == "kaykit":
+		_merge_body()
 	var show: Array = opts.get("show", [])
 	var recolor: bool = opts.has("hue") or opts.has("sat") or opts.has("light")
 	for m in model.find_children("*", "MeshInstance3D", true, false):
@@ -162,6 +165,72 @@ func flash(v: float) -> void:
 		if m is BaseMaterial3D:
 			(m as BaseMaterial3D).emission_enabled = v > 0.0
 			(m as BaseMaterial3D).emission = Color(v, v * 0.15, v * 0.1)
+
+
+## KayKit characters are 6+ skinned parts sharing one skin and texture: merge them into a single
+## mesh (one draw call per character instead of 6-8, which matters a lot on phones).
+func _merge_body() -> void:
+	var skel: Skeleton3D = model.find_child("Skeleton3D", true, false)
+	if skel == null:
+		return
+	var parts: Array = []
+	for c in skel.get_children():
+		if c is MeshInstance3D and (c as MeshInstance3D).skin != null:
+			parts.append(c)
+	if parts.size() < 2:
+		return
+	var skin: Skin = parts[0].skin
+	for p in parts:
+		if p.skin != skin:
+			return
+	var mesh: ArrayMesh = _merged.get(def.file)
+	if mesh == null:
+		var groups := {}
+		var mats := {}
+		for p in parts:
+			var m: Mesh = p.mesh
+			for si in m.get_surface_count():
+				var mat: Material = p.get_active_material(si)
+				var key := mat.get_instance_id() if mat else 0
+				mats[key] = mat
+				var a: Array = m.surface_get_arrays(si)
+				if not groups.has(key):
+					groups[key] = {"v": PackedVector3Array(), "n": PackedVector3Array(), "uv": PackedVector2Array(), "b": PackedInt32Array(), "w": PackedFloat32Array(), "i": PackedInt32Array()}
+				var g: Dictionary = groups[key]
+				var base: int = g.v.size()
+				g.v.append_array(a[Mesh.ARRAY_VERTEX])
+				g.n.append_array(a[Mesh.ARRAY_NORMAL])
+				g.uv.append_array(a[Mesh.ARRAY_TEX_UV] if a[Mesh.ARRAY_TEX_UV] != null else PackedVector2Array())
+				g.b.append_array(a[Mesh.ARRAY_BONES])
+				g.w.append_array(a[Mesh.ARRAY_WEIGHTS])
+				var idx: PackedInt32Array = a[Mesh.ARRAY_INDEX]
+				for k in idx.size():
+					g.i.append(idx[k] + base)
+		mesh = ArrayMesh.new()
+		for key in groups:
+			var g: Dictionary = groups[key]
+			var arr := []
+			arr.resize(Mesh.ARRAY_MAX)
+			arr[Mesh.ARRAY_VERTEX] = g.v
+			arr[Mesh.ARRAY_NORMAL] = g.n
+			if g.uv.size() == g.v.size():
+				arr[Mesh.ARRAY_TEX_UV] = g.uv
+			arr[Mesh.ARRAY_BONES] = g.b
+			arr[Mesh.ARRAY_WEIGHTS] = g.w
+			arr[Mesh.ARRAY_INDEX] = g.i
+			var flags := Mesh.ARRAY_FLAG_USE_8_BONE_WEIGHTS if g.w.size() == g.v.size() * 8 else 0
+			mesh.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, arr, [], {}, flags)
+			mesh.surface_set_material(mesh.get_surface_count() - 1, mats[key])
+		_merged[def.file] = mesh
+	var mi := MeshInstance3D.new()
+	mi.name = "Body"
+	mi.mesh = mesh
+	mi.skin = skin
+	skel.add_child(mi)
+	mi.skeleton = NodePath("..")
+	for p in parts:
+		skel.remove_child(p)
+		p.queue_free()
 
 
 ## Re-dye clothing (keeps skin, hair, leather and greys) for villager variety.

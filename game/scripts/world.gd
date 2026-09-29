@@ -558,8 +558,8 @@ func add_cylinder_collider(pos: Vector3, r: float, h: float) -> void:
 func scatter_vegetation() -> void:
 	var R := U.make_rng(seed_value + 5)
 	var trees := {
-		"common": ["CommonTree_1", "CommonTree_2", "CommonTree_5", "CommonTree_3"], "pine": ["PineTree_1", "PineTree_2", "PineTree_3", "PineTree_4"],
-		"birch": ["BirchTree_1", "BirchTree_2", "BirchTree_3"], "willow": ["Willow_1", "Willow_2"], "dead": ["CommonTree_Dead_1", "CommonTree_Dead_2"],
+		"common": ["CommonTree_1", "CommonTree_2", "CommonTree_5"], "pine": ["PineTree_1", "PineTree_2", "PineTree_3"],
+		"birch": ["BirchTree_2"], "willow": ["Willow_1"], "dead": ["CommonTree_Dead_1"],
 	}
 	var step := 8.0 if quality == "low" else (6.8 if quality == "med" else 5.8)
 	var x := -192.0
@@ -808,8 +808,8 @@ void sky() {
 func build_lights() -> void:
 	sun = DirectionalLight3D.new()
 	sun.shadow_enabled = quality != "low"
-	sun.directional_shadow_mode = DirectionalLight3D.SHADOW_PARALLEL_2_SPLITS
-	sun.directional_shadow_max_distance = 55.0 if quality == "med" else 80.0
+	sun.directional_shadow_mode = DirectionalLight3D.SHADOW_PARALLEL_2_SPLITS if quality == "high" else DirectionalLight3D.SHADOW_ORTHOGONAL
+	sun.directional_shadow_max_distance = 45.0 if quality == "med" else 70.0
 	sun.shadow_blur = 1.2
 	sun.light_angular_distance = 0.5
 	add_child(sun)

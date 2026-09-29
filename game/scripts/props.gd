@@ -3,7 +3,7 @@ extends RefCounted
 ## Collects static prop placements and renders them as spatially-chunked MultiMeshes
 ## (few draw calls, per-chunk culling + distance fade, Godot's automatic mesh LODs).
 
-const CHUNK := 64.0
+const CHUNK := 96.0
 var items := {}
 static var _tinted := {}
 
@@ -31,6 +31,7 @@ func _tinted_mesh(mesh: Mesh) -> Mesh:
 
 func build(parent: Node3D, quality: String) -> void:
 	var far_mul := 1.0 if quality == "high" else (0.8 if quality == "med" else 0.6)
+	var merged := {}
 	for key in items:
 		var bn: PackedStringArray = key.split("/")
 		var parts := Assets.parts(bn[0], bn[1])
@@ -44,6 +45,21 @@ func build(parent: Node3D, quality: String) -> void:
 			chunks[ck].append(it)
 		for ck in chunks:
 			var list: Array = chunks[ck]
+			# props placed only a few times per area are merged into one mesh per material (see below)
+			var is_tree: bool = bn[1].contains("Tree") or bn[1].begins_with("Willow")
+			if list.size() < 8 and not is_tree:
+				if not merged.has(ck):
+					merged[ck] = {"batch": MeshBatch.new(), "mats": {}}
+				var mb: Dictionary = merged[ck]
+				for it in list:
+					for p in parts:
+						var mesh: Mesh = p.mesh
+						for si in mesh.get_surface_count():
+							var mat := mesh.surface_get_material(si)
+							var mkey := str(mat.get_instance_id()) if mat else "none"
+							mb.mats[mkey] = mat if mat else StandardMaterial3D.new()
+							mb.batch.add_arrays(mkey, mesh.surface_get_arrays(si), it.xf * p.xform, Color.WHITE)
+				continue
 			var tinted: bool = list.any(func(i): return i.tint != null)
 			var inst_scale: float = (list[0].xf as Transform3D).basis.get_scale().x
 			var world_size := size * inst_scale
@@ -68,4 +84,11 @@ func build(parent: Node3D, quality: String) -> void:
 				mmi.visibility_range_end_margin = 8.0
 				mmi.visibility_range_fade_mode = GeometryInstance3D.VISIBILITY_RANGE_FADE_SELF if quality != "low" else GeometryInstance3D.VISIBILITY_RANGE_FADE_DISABLED
 				parent.add_child(mmi)
+	for ck in merged:
+		var mi: MeshInstance3D = merged[ck].batch.build(merged[ck].mats)
+		mi.visibility_range_end = 150.0 * far_mul
+		if quality != "high":
+			mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+		mi.visibility_range_end_margin = 10.0
+		parent.add_child(mi)
 	items.clear()
