@@ -41,6 +41,7 @@ func _run() -> void:
 	await game.setup(4242, {}, {"quality": "high", "sens": 1.0, "vol": 0.0, "music": 0.0, "fov": 75.0}, "0.3.0", func(l, p): pass)
 	print("[t] session ready in %d ms: %d npcs, %d enemies" % [Time.get_ticks_msec() - t0, game.npcs.size(), game.enemies.size()])
 	game.start(true)
+	game.input.is_touch = true
 	await shot("spawn", 40)
 	var P := game.player
 	check("player on ground", P.is_on_floor())
