@@ -1,6 +1,6 @@
 // Hollowmere asset pipeline.
 // Downloads CC0 source assets (KayKit, Quaternius, Poly Haven), strips/merges/compresses them,
-// and writes game-ready files to web/assets. Run:  cd tools && npm install && npm run assets
+// and writes game-ready files to game/assets (the Godot project). Run:  cd tools && npm install && npm run assets
 //
 // Sources (all CC0 / public domain):
 //  - KayKit by Kay Lousberg            https://github.com/KayKit-Game-Assets
@@ -16,7 +16,7 @@ import { MeshoptEncoder, MeshoptSimplifier } from 'meshoptimizer';
 import sharp from 'sharp';
 
 const ROOT = path.resolve(path.dirname(new URL(import.meta.url).pathname.replace(/^\/(\w:)/, '$1')), '..');
-const OUT = path.join(ROOT, 'web', 'assets');
+const OUT = path.join(ROOT, 'game', 'assets');
 const CACHE = path.join(ROOT, 'tools', '.cache');
 fs.mkdirSync(CACHE, { recursive: true });
 await MeshoptEncoder.ready; await MeshoptSimplifier.ready;
@@ -72,7 +72,7 @@ function killAnim(a) {
 const kb = (f) => `${(fs.statSync(f).size / 1024).toFixed(0)}KB`;
 async function write(doc, rel) {
   const f = path.join(OUT, rel); fs.mkdirSync(path.dirname(f), { recursive: true });
-  await doc.transform(meshopt({ encoder: MeshoptEncoder, level: 'medium' })); // decoded in-game by three's MeshoptDecoder
+  // (no meshopt/quantization: Godot's glTF importer reads plain float data)
   await io.write(f, doc); console.log('  ', rel, kb(f));
 }
 
@@ -93,7 +93,7 @@ async function bundle(rel, items, texSize = 512, lods = null) {
     src.getRoot().listAnimations().forEach(killAnim);
     const before = new Set(doc.getRoot().listScenes());
     mergeDocuments(doc, src);
-    const root = doc.createNode(id);
+    const root = doc.createNode('P_' + id); // prefixed: Godot renames nodes that clash with their mesh children
     for (const s of doc.getRoot().listScenes().filter((s) => !before.has(s))) {
       for (const n of s.listChildren()) { s.removeChild(n); root.addChild(n); }
       s.dispose();
@@ -114,17 +114,24 @@ async function character(rel, file, texSize = 512) {
 async function animations(rel, files, keep) {
   // Animation-only file: all KayKit characters share one rig, so these clips drive every human/skeleton.
   const doc = await io.read(files[0]);
-  for (const extra of files.slice(1)) mergeDocuments(doc, await io.read(extra));
+  const mainScene = doc.getRoot().listScenes()[0];
+  const mainNodes = new Map();
+  mainScene.traverse((n) => mainNodes.set(n.getName(), n));
+  for (const extra of files.slice(1)) {
+    mergeDocuments(doc, await io.read(extra));
+    // clips from the extra file target its own (identically named) bones: retarget them onto the main rig
+    for (const a of doc.getRoot().listAnimations()) for (const ch of a.listChannels()) {
+      const tn = ch.getTargetNode();
+      if (tn && mainNodes.get(tn.getName()) && mainNodes.get(tn.getName()) !== tn) ch.setTargetNode(mainNodes.get(tn.getName()));
+      else if (tn && !mainNodes.get(tn.getName())) ch.dispose(); // bone only the extra model has (e.g. a jaw)
+    }
+  }
   const seen = new Set();
   for (const a of doc.getRoot().listAnimations()) {
     if (!keep.includes(a.getName()) || seen.has(a.getName())) killAnim(a); else seen.add(a.getName());
   }
-  for (const n of doc.getRoot().listNodes()) if (n.getMesh()) n.setMesh(null);
-  doc.getRoot().listMeshes().forEach((m) => m.dispose());
-  doc.getRoot().listTextures().forEach((t) => t.dispose());
-  doc.getRoot().listMaterials().forEach((m) => m.dispose());
-  doc.getRoot().listSkins().forEach((s) => s.dispose());
-  // keep only the first scene
+  // keep only the first (Knight) scene: its skinned mesh makes Godot build a Skeleton3D whose bone
+  // paths match every other KayKit character, so these clips can drive all of them
   doc.getRoot().listScenes().slice(1).forEach((s) => s.dispose());
   await doc.transform(unpartition(), resample(), dedup(), prune({ keepLeaves: true }));
   console.log('   clips:', doc.getRoot().listAnimations().map((a) => a.getName()).join(', '));
@@ -211,6 +218,29 @@ const TEX = {
 };
 for (const [name, id] of Object.entries(TEX)) await polyhaven(name, id, ['grass', 'dirt', 'rock', 'forest'].includes(name) ? 1024 : 1024);
 
+console.log('Fonts');
+const FONTS = {
+  'Cinzel.ttf': 'https://github.com/google/fonts/raw/main/ofl/cinzel/Cinzel%5Bwght%5D.ttf',
+  'AlegreyaSans-Regular.ttf': 'https://github.com/google/fonts/raw/main/ofl/alegreyasans/AlegreyaSans-Regular.ttf',
+  'AlegreyaSans-Bold.ttf': 'https://github.com/google/fonts/raw/main/ofl/alegreyasans/AlegreyaSans-Bold.ttf',
+};
+for (const [f, url] of Object.entries(FONTS)) {
+  const out = path.join(OUT, 'fonts', f);
+  await fetchTo(url, out); console.log('  ', 'fonts/' + f, kb(out));
+}
+// Colour emoji used as UI icons: subset Noto Color Emoji to just the glyphs the game uses (10MB -> ~100KB).
+// Needs Python fonttools (pip install fonttools); falls back to the full font otherwise.
+{
+  const full = await fetchTo('https://github.com/googlefonts/noto-emoji/raw/main/2D/fonts/NotoColorEmoji-noflags.ttf', path.join(CACHE, 'NotoColorEmoji.ttf'));
+  const EMOJI = '⛏️🔱🗡️⚔️🪓🏹🌿💚⚡🔥👕🦺🛡️🥋🌾🥕🎃🧪🔮🍞🍲🐺👂🦴🌸🪙🎒📜📖🗺️⚙️❤💧✋⤒☀️🌙❗✅✔💬📋🛒🛏️✨💾🎛️❓⬆️🏠📱⚜🧭🔒🌟🍺🐉👑⭐🎯🪨🍄🌲🏰🧙🗝️🕯️💀🪦🌕🌑';
+  const cps = [...new Set([...EMOJI].map((c) => c.codePointAt(0)))].map((c) => 'U+' + c.toString(16).toUpperCase()).join(',');
+  const out = path.join(OUT, 'fonts', 'Emoji.ttf');
+  try {
+    execSync(`python -m fontTools.subset "${full}" --unicodes="${cps},U+FE0F,U+200D" --output-file="${out}" --no-hinting`, { stdio: 'pipe' });
+  } catch (e) { console.warn('   fonttools unavailable - using the full emoji font'); fs.copyFileSync(full, out); }
+  console.log('  ', 'fonts/Emoji.ttf', kb(out));
+}
+
 // credits file
 fs.writeFileSync(path.join(OUT, 'CREDITS.txt'), `Hollowmere uses the following CC0 (public domain) assets. Thank you!
 
@@ -220,5 +250,7 @@ Quaternius - quaternius.com
   Ultimate Nature, Crops, Medieval Village, Modular Medieval Buildings, Survival, RPG Items, Animals, Ultimate Monsters
 Poly Haven - polyhaven.com
   Textures: ${Object.values(TEX).join(', ')}
+
+Fonts (SIL Open Font License): Cinzel, Alegreya Sans, Noto Color Emoji - via Google Fonts
 `);
 console.log('Done. Total:', (walk(OUT).reduce((a, f) => a + fs.statSync(f).size, 0) / 1048576).toFixed(1), 'MB');
