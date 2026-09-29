@@ -5,7 +5,7 @@ config_version=5
 
 config/name="Hollowmere"
 config/description="A procedurally generated first-person fantasy RPG. Become what you do."
-config/version="0.3.0"
+config/version="0.3.1"
 run/main_scene="res://scenes/main.tscn"
 config/features=PackedStringArray("4.7", "Mobile")
 config/icon="res://icon.svg"
@@ -29,6 +29,10 @@ pointing/emulate_mouse_from_touch=true
 [gui]
 
 common/drop_mouse_on_gui_input_disabled=true
+
+[network]
+
+tls/certificate_bundle_override="res://assets/cacert.pem"
 
 [physics]
 

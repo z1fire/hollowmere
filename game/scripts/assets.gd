@@ -30,23 +30,17 @@ static func load_all(host: Node, progress: Callable) -> void:
 	for t in TEX:
 		for suffix in ["d", "n", "r"]:
 			jobs.append(["t", t + "_" + suffix, "res://assets/tex/%s_%s.jpg" % [t, suffix]])
-	var done := 0
-	for j in jobs:
-		ResourceLoader.load_threaded_request(j[2])
-	for j in jobs:
-		var res = ResourceLoader.load_threaded_get(j[2])
-		match j[0]:
-			"b":
-				bundles[j[1]] = (res as PackedScene).instantiate()
-			"c":
-				chars[j[1]] = res
-			"t":
-				var parts: PackedStringArray = j[1].rsplit("_", true, 1)
-				if not tex.has(parts[0]):
-					tex[parts[0]] = {}
-				tex[parts[0]][{"d": "albedo", "n": "normal", "r": "rough"}[parts[1]]] = res
-		done += 1
-		progress.call(float(done) / jobs.size())
+	# Load one item per frame on the main thread. Threaded loading froze on some Android
+	# phones (Vulkan), leaving the title screen stuck; this keeps the loading screen alive.
+	var total := jobs.size()
+	for i in total:
+		var j: Array = jobs[i]
+		var res: Resource = load(j[2])
+		if res == null:
+			push_error("Could not load " + j[2])
+		else:
+			_store(j, res)
+		progress.call(float(i + 1) / total)
 		await host.get_tree().process_frame
 	# one shared animation library drives every KayKit character (they share a rig)
 	var anim_root: Node = chars.anims.instantiate()
@@ -59,6 +53,19 @@ static func load_all(host: Node, progress: Callable) -> void:
 	for f in ["Cinzel", "AlegreyaSans-Regular", "AlegreyaSans-Bold", "Emoji"]:
 		fonts[f] = load("res://assets/fonts/%s.ttf" % f)
 	loaded = true
+
+
+static func _store(j: Array, res: Resource) -> void:
+	match j[0]:
+		"b":
+			bundles[j[1]] = (res as PackedScene).instantiate()
+		"c":
+			chars[j[1]] = res
+		"t":
+			var parts: PackedStringArray = j[1].rsplit("_", true, 1)
+			if not tex.has(parts[0]):
+				tex[parts[0]] = {}
+			tex[parts[0]][{"d": "albedo", "n": "normal", "r": "rough"}[parts[1]]] = res
 
 
 static func node(bundle: String, name: String) -> Node3D:

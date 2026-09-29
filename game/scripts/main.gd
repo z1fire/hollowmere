@@ -11,9 +11,13 @@ var game: Game
 var save := {}
 var confirm_new := false
 var theme: Theme
+var err_label: Label
+var last_progress := 0.0
+var stall_t := 0.0
 
 
 func _ready() -> void:
+	OS.add_logger(GameLog.new())
 	get_tree().quit_on_go_back = false
 	var touch := DisplayServer.is_touchscreen_available()
 	settings = {"quality": "med" if touch else "high", "sens": 1.0, "vol": 0.7, "music": 0.5, "fov": 72.0 if touch else 75.0}
@@ -209,14 +213,39 @@ void fragment() {
 	load_bar.add_theme_stylebox_override("background", bgs)
 	load_bar.add_theme_stylebox_override("fill", fill)
 	lv.add_child(load_bar)
+	err_label = Label.new()
+	err_label.add_theme_color_override("font_color", Color("#ff8a6a"))
+	err_label.add_theme_font_size_override("font_size", 13)
+	err_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	err_label.custom_minimum_size = Vector2(700, 0)
+	err_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	lv.add_child(err_label)
 	loading.add_child(lv)
 	ui_root.add_child(loading)
+
+
+func _process(dt: float) -> void:
+	# show errors on the loading screen, and a hint if loading stalls
+	if loading and loading.visible:
+		stall_t = 0.0 if load_bar.value != last_progress else stall_t + dt
+		last_progress = load_bar.value
+		var errs := GameLog.recent(5)
+		var txt := errs
+		if stall_t > 25.0:
+			txt = "Still working... (this can take a while on the first run)
+" + errs
+		if err_label.text != txt:
+			err_label.text = txt
+			GameLog.save_to_disk()
 
 
 func _begin(is_new: bool) -> void:
 	title_box.visible = false
 	loading.visible = true
-	await get_tree().process_frame
+	load_label.text = "Loading models & textures..."
+	# let the loading screen actually reach the display before any heavy work
+	for i in 3:
+		await get_tree().process_frame
 	await Assets.load_all(self, func(p: float):
 		load_label.text = "Loading models & textures..."
 		load_bar.value = p * 0.4)
