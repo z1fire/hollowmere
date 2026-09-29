@@ -1,6 +1,8 @@
 import * as THREE from 'three';
 import { clamp, lerp } from './util.js';
 import { ITEMS, SKILLS, CROPS, xpToNext, computeClass } from './data.js';
+import { heldModel } from './characters.js';
+import { Assets } from './assets.js';
 
 const STACK = ['seed', 'crop', 'consumable', 'material'];
 
@@ -246,27 +248,24 @@ class Viewmodel {
   }
   mat(c, o) { return new THREE.MeshStandardMaterial({ color: c, roughness: 0.7, ...o }); }
   set(item) {
-    this.root.clear(); this.item = item;
+    this.root.clear(); this.item = item; this.string = this.arrow = this.orb = null;
     const g = new THREE.Group(); this.model = g; this.root.add(g);
     const skin = this.mat('#e0b48a'), wood = this.mat('#7a5634'), metal = this.mat('#c8ccd0', { metalness: 0.7, roughness: 0.3 });
-    const hand = new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.1, 0.12), skin);
-    const sleeve = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.08, 0.2), this.mat('#9c7a4a'));
+    const hand = new THREE.Mesh(new THREE.SphereGeometry(0.038, 12, 10), this.mat('#6a4a30', { roughness: 0.6 })); hand.scale.set(1, 0.9, 1.25);
+    const sleeve = new THREE.Mesh(new THREE.CylinderGeometry(0.045, 0.055, 0.22, 10), this.mat('#8a6a48', { roughness: 0.9 })); sleeve.rotation.x = Math.PI / 2;
     const kind = item ? item.vm || item.kind : 'fists';
     const tint = item?.tint ? this.mat(item.tint, { metalness: 0.7, roughness: 0.3 }) : metal;
     this.kind = kind;
-    const addArm = (x, y, z) => { const h = hand.clone(); h.position.set(x, y, z); g.add(h); const s = sleeve.clone(); s.position.set(x + 0.01, y - 0.04, z + 0.14); s.rotation.x = 0.3; g.add(s); };
+    const addArm = (x, y, z) => { const h = hand.clone(); h.position.set(x, y, z); g.add(h); };
+    // tint a cloned model (e.g. rusty or golden weapons)
+    const tinted = (o, color) => { if (color) o.traverse((m) => { if (m.isMesh) { m.material = m.material.clone(); m.material.color.multiply(new THREE.Color(color)); } }); return o; };
     switch (kind) {
-      case 'sword': {
-        const s = new THREE.Group(); s.add(new THREE.Mesh(new THREE.BoxGeometry(0.035, 0.16, 0.035), wood));
-        const guard = new THREE.Mesh(new THREE.BoxGeometry(0.2, 0.03, 0.05), this.mat('#8a7a4a', { metalness: 0.6 })); guard.position.y = 0.09; s.add(guard);
-        const blade = new THREE.Mesh(new THREE.BoxGeometry(0.055, 0.75, 0.012), tint); blade.position.y = 0.48; s.add(blade);
-        const tip = new THREE.Mesh(new THREE.ConeGeometry(0.039, 0.1, 4), tint); tip.position.y = 0.9; tip.rotation.y = Math.PI / 4; tip.scale.z = 0.3; s.add(tip);
-        s.rotation.x = -0.35; s.position.set(0, 0.02, 0); g.add(s); addArm(0, 0, 0.02); g.userData.base = [0.34, -0.42, -0.62, 0.1, 0, -0.25]; break;
-      }
-      case 'axe': {
-        const s = new THREE.Group(); const h = new THREE.Mesh(new THREE.BoxGeometry(0.04, 0.8, 0.04), wood); h.position.y = 0.3; s.add(h);
-        const head = new THREE.Mesh(new THREE.BoxGeometry(0.04, 0.22, 0.26), tint); head.position.set(0, 0.62, 0.1); s.add(head);
-        s.rotation.x = -0.4; g.add(s); addArm(0, 0, 0.02); g.userData.base = [0.36, -0.46, -0.62, 0.1, 0, -0.2]; break;
+      case 'sword': case 'axe': {
+        const name = { knight_blade: 'sword_2handed', war_axe: 'axe_2handed' }[item.id] || (kind === 'axe' ? 'axe_1handed' : 'sword_1handed');
+        const w = tinted(heldModel('weapons', name), item.id === 'rusty_sword' ? '#b89878' : item.id === 'knight_blade' ? '#ffe6a0' : null);
+        w.scale.setScalar(name.includes('2handed') ? 0.17 : 0.2);
+        w.rotation.x = -0.35; g.add(w); addArm(0, 0, 0.02);
+        g.userData.base = [0.36, -0.38, -0.62, 0.1, 0, -0.3]; break;
       }
       case 'pitchfork': case 'hoe': {
         const s = new THREE.Group(); const h = new THREE.Mesh(new THREE.CylinderGeometry(0.018, 0.018, 1.7, 6), wood); h.position.y = 0.35; s.add(h);
@@ -277,27 +276,26 @@ class Viewmodel {
         s.rotation.x = -1.2; g.add(s); addArm(0, 0, 0.02); addArm(-0.05, 0.25, -0.35); g.userData.base = [0.3, -0.4, -0.5, 0, 0.15, -0.1]; break;
       }
       case 'bow': {
-        const s = new THREE.Group();
-        const bow = new THREE.Mesh(new THREE.TorusGeometry(0.42, 0.018, 5, 16, Math.PI * 0.8), this.mat(item.tint || '#6b4a2b')); bow.rotation.z = Math.PI / 2 + Math.PI * 0.1; s.add(bow);
-        const str = new THREE.Mesh(new THREE.BoxGeometry(0.004, 0.8, 0.004), this.mat('#eee')); str.position.x = -0.13; s.add(str); this.string = str;
-        const arrow = new THREE.Mesh(new THREE.CylinderGeometry(0.008, 0.008, 0.7, 4), this.mat('#8a6a44')); arrow.rotation.z = Math.PI / 2; arrow.position.x = 0.2; s.add(arrow); this.arrow = arrow;
-        s.rotation.y = Math.PI / 2; s.rotation.z = 0.15; g.add(s); addArm(0, -0.02, 0.05); g.userData.base = [0.12, -0.3, -0.55, 0, 0, 0]; break;
+        const w = heldModel('village', item.id === 'longbow' ? 'Bow_Golden' : 'Bow_Wooden');
+        tinted(w, item.id === 'short_bow' ? '#c8a888' : null);
+        w.scale.setScalar(0.24); w.rotation.set(0, Math.PI / 2, 0.18); g.add(w);
+        const arrow = heldModel('weapons', 'arrow'); arrow.scale.setScalar(0.45); arrow.rotation.set(-Math.PI / 2, 0, 0); arrow.position.set(0, 0.0, -0.05); g.add(arrow); this.arrow = arrow;
+        addArm(0, -0.02, 0.05); g.userData.base = [0.2, -0.26, -0.6, 0, 0, 0]; break;
       }
       case 'tome': {
-        const cols = { nature: '#2a6a2a', heal: '#2a7a5a', spark: '#2a3a8a', fire: '#8a2a1a' };
+        const cols = { nature: '#9aff9a', heal: '#a0ffe0', spark: '#a8c0ff', fire: '#ffb0a0' };
         const glow = { nature: '#8aff6a', heal: '#8affc0', spark: '#9ac8ff', fire: '#ffa040' }[item.school];
-        const b = new THREE.Group();
-        const cover = new THREE.Mesh(new THREE.BoxGeometry(0.26, 0.04, 0.34), this.mat(cols[item.school])); b.add(cover);
-        const pages = new THREE.Mesh(new THREE.BoxGeometry(0.24, 0.035, 0.32), this.mat('#f4ecd8')); pages.position.y = 0.03; b.add(pages);
-        b.position.set(-0.42, -0.02, 0.05); b.rotation.set(0.9, 0.3, 0.2); g.add(b);
+        const b = tinted(heldModel('weapons', 'spellbook_open'), cols[item.school]);
+        b.scale.setScalar(0.26); b.position.set(-0.34, -0.04, 0.0); b.rotation.set(-0.5, 0.35, 0.15); g.add(b);
         const orb = new THREE.Mesh(new THREE.SphereGeometry(0.06, 10, 8), new THREE.MeshBasicMaterial({ color: glow })); orb.position.set(0, 0.1, -0.05); g.add(orb); this.orb = orb;
-        const halo = new THREE.Sprite(new THREE.SpriteMaterial({ map: this.game.combat.glowTex, color: glow, blending: THREE.AdditiveBlending, transparent: true, depthWrite: false })); halo.scale.setScalar(0.35); orb.add(halo);
+        const halo = new THREE.Sprite(new THREE.SpriteMaterial({ map: this.game.combat.glowTex, color: glow, blending: THREE.AdditiveBlending, transparent: true, depthWrite: false })); halo.scale.setScalar(0.16); orb.add(halo);
         addArm(0, 0, 0.02); addArm(-0.42, -0.08, 0.1); g.userData.base = [0.26, -0.36, -0.55, 0, 0, 0]; break;
       }
       case 'seed': case 'crop': case 'consumable': case 'material': {
         let m;
-        if (kind === 'consumable' && item.id.includes('potion')) { m = new THREE.Mesh(new THREE.SphereGeometry(0.08, 10, 8), this.mat(item.id === 'hp_potion' ? '#d02a3a' : '#3a5ad0', { roughness: 0.2 })); const neck = new THREE.Mesh(new THREE.CylinderGeometry(0.025, 0.025, 0.08, 6), this.mat('#aaa')); neck.position.y = 0.09; m.add(neck); }
-        else if (kind === 'seed') m = new THREE.Mesh(new THREE.SphereGeometry(0.08, 8, 6), this.mat('#b89a60'));
+        if (kind === 'consumable' && item.id.includes('potion')) { m = heldModel('village', item.id === 'hp_potion' ? 'Potion1_Filled' : 'Potion4_Filled'); m.scale.setScalar(0.16); }
+        else if (kind === 'seed') { m = heldModel('village', 'Bag'); m.scale.setScalar(0.9); }
+        else if (kind === 'crop' && Assets.bundles.crops.getObjectByName({ wheat: 'Wheat_4', carrot: 'Carrot_4', pumpkin: 'Pumpkin_4' }[item.id] || '')) { m = heldModel('crops', { wheat: 'Wheat_4', carrot: 'Carrot_4', pumpkin: 'Pumpkin_4' }[item.id]); m.scale.setScalar(item.id === 'pumpkin' ? 0.18 : 0.3); }
         else m = new THREE.Mesh(new THREE.SphereGeometry(0.07, 8, 6), this.mat(item.id === 'pumpkin' ? '#e8781c' : item.id === 'carrot' ? '#f08a24' : '#d8b860'));
         m.position.set(0, 0.08, -0.02); g.add(m); addArm(0, 0, 0.02); g.userData.base = [0.3, -0.36, -0.5, 0.2, 0, 0]; break;
       }

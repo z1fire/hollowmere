@@ -1,7 +1,7 @@
 import { Game } from './game.js';
 import { Audio } from './audio.js';
 import { getVersion, isAndroid, openExternal, APK_URL } from './update.js';
-import { ITEMS } from './data.js';
+import { Assets } from './assets.js';
 
 const $ = (id) => document.getElementById(id);
 const isTouch = matchMedia('(pointer: coarse)').matches || 'ontouchstart' in window;
@@ -33,8 +33,14 @@ function begin(isNew) {
   $('loading').classList.remove('hidden');
   audio.unlock();
   // let the loading screen paint before the heavy world generation
-  setTimeout(() => {
+  setTimeout(async () => {
     try {
+      if (!Assets.loaded) {
+        await Assets.load((p) => { $('loadText').textContent = `Loading models & textures... ${Math.round(p * 100)}%`; }, 8);
+        Assets.loaded = true;
+      }
+      $('loadText').textContent = 'Generating the world...';
+      await new Promise((r) => setTimeout(r, 30));
       if (isNew) Game.clearSave();
       const seed = Math.floor(Math.random() * 1e9);
       const game = new Game({ seed, saveData: isNew ? null : save, settings, audio, version, onProgress: (t) => { $('loadText').textContent = t; } });

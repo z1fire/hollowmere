@@ -8,6 +8,27 @@ import { NPC, Enemy } from './entities.js';
 import { RNG, clamp } from './util.js';
 import { ITEMS, CROPS, QUESTS, ROLES, LORE, NAMES, ENEMIES } from './data.js';
 import { checkForUpdate } from './update.js';
+import { Assets } from './assets.js';
+import { EffectComposer } from './vendor/addons/postprocessing/EffectComposer.js';
+import { RenderPass } from './vendor/addons/postprocessing/RenderPass.js';
+import { UnrealBloomPass } from './vendor/addons/postprocessing/UnrealBloomPass.js';
+import { OutputPass } from './vendor/addons/postprocessing/OutputPass.js';
+import { ShaderPass } from './vendor/addons/postprocessing/ShaderPass.js';
+import { mergeGeometries } from './vendor/addons/utils/BufferGeometryUtils.js';
+
+// Final colour grade: gentle warmth, contrast, saturation and a vignette.
+const GradeShader = {
+  uniforms: { tDiffuse: { value: null }, uVignette: { value: 0.32 }, uSat: { value: 1.1 }, uNight: { value: 0 } },
+  vertexShader: 'varying vec2 vUv; void main(){ vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }',
+  fragmentShader: `uniform sampler2D tDiffuse; uniform float uVignette, uSat, uNight; varying vec2 vUv;
+    void main(){ vec4 c = texture2D(tDiffuse, vUv); vec3 col = c.rgb;
+      float l = dot(col, vec3(0.299, 0.587, 0.114));
+      col = mix(vec3(l), col, uSat);
+      col = (col - 0.5) * 1.06 + 0.5;
+      col *= mix(vec3(1.03, 1.0, 0.95), vec3(0.9, 0.95, 1.08), uNight);
+      vec2 d = vUv - 0.5; col *= 1.0 - dot(d, d) * uVignette * 2.2;
+      gl_FragColor = vec4(clamp(col, 0.0, 1.0), c.a); }`,
+};
 
 const SAVE_KEY = 'hollowmere_save_v1';
 const SEC_PER_HOUR = 30;
@@ -30,6 +51,7 @@ export class Game {
     this.seed = seed;
     onProgress?.('Shaping the land...');
     this.world = new World(this.scene, r, seed, q);
+    this.setupPost();
     this.combat = new Combat(this);
     this.player = new Player(this);
     this.ui = new UI(this);
@@ -81,9 +103,26 @@ export class Game {
     this.checkUpdate(false);
   }
 
+  setupPost() {
+    const q = this.settings.quality, r = this.renderer;
+    if (q === 'low') { this.composer = null; return; }
+    const size = r.getDrawingBufferSize(new THREE.Vector2());
+    const rt = new THREE.WebGLRenderTarget(size.x, size.y, { type: THREE.HalfFloatType, samples: q === 'high' ? 4 : 2 });
+    const c = this.composer = new EffectComposer(r, rt);
+    c.addPass(new RenderPass(this.scene, this.camera));
+    this.vmPass = new RenderPass(null, null); this.vmPass.clear = false; this.vmPass.clearDepth = true;
+    c.addPass(this.vmPass);
+    this.bloom = new UnrealBloomPass(new THREE.Vector2(size.x / 2, size.y / 2), 0.32, 0.55, 0.88);
+    c.addPass(this.bloom);
+    c.addPass(new OutputPass());
+    this.grade = new ShaderPass(GradeShader);
+    c.addPass(this.grade);
+  }
+
   resize() {
     const w = innerWidth, h = innerHeight;
     this.renderer.setSize(w, h);
+    if (this.composer) { this.composer.setPixelRatio(this.renderer.getPixelRatio()); this.composer.setSize(w, h); }
     this.camera.aspect = w / h; this.camera.updateProjectionMatrix();
     this.combat.setScale(this.renderer.domElement.height / 2 / Math.tan((this.camera.fov * Math.PI) / 360));
     const mm = document.getElementById('minimap'); const s = Math.round(clamp(Math.min(w, h) * 0.26, 100, 190));
@@ -124,8 +163,16 @@ export class Game {
     this.autosaveT -= dt; if (this.autosaveT <= 0) { this.autosaveT = 60; this.save(true); }
     // render world, then the held item on top
     const r = this.renderer;
-    r.render(this.scene, this.camera);
-    if (!P.dead) { r.autoClear = false; r.clearDepth(); r.render(P.vm.scene, P.vm.camera); r.autoClear = true; }
+    P.vm.scene.environment = this.scene.environment;
+    if (this.composer) {
+      this.vmPass.scene = P.vm.scene; this.vmPass.camera = P.vm.camera; this.vmPass.enabled = !P.dead;
+      this.grade.uniforms.uNight.value = W.night;
+      this.bloom.strength = 0.25 + W.night * 0.35;
+      this.composer.render(dt);
+    } else {
+      r.render(this.scene, this.camera);
+      if (!P.dead) { r.autoClear = false; r.clearDepth(); r.render(P.vm.scene, P.vm.camera); r.autoClear = true; }
+    }
   }
 
   // ---------- interaction ----------
@@ -360,7 +407,9 @@ class Farm {
   constructor(game) {
     this.game = game; const W = game.world;
     this.soilGeo = new THREE.BoxGeometry(1.4, 0.1, 1.4);
-    this.soilMat = new THREE.MeshStandardMaterial({ color: '#5a3e24', roughness: 1 });
+    this.rowGeo = new THREE.BoxGeometry(1.3, 0.07, 0.2);
+    const dirt = Assets.tex.dirt;
+    this.soilMat = new THREE.MeshStandardMaterial({ color: '#8a6a4a', map: dirt.map, normalMap: dirt.normalMap, roughness: 1 });
     this.weedMat = new THREE.MeshLambertMaterial({ color: '#5a8a2a' });
     this.stemMat = new THREE.MeshLambertMaterial({ color: '#5aa03a' });
     for (const p of W.plots) {
@@ -371,31 +420,40 @@ class Farm {
   progress(p) { return clamp(p.t / CROPS[p.crop].grow, 0, 1); }
   ripe(p) { return p.state === 'planted' && p.t >= CROPS[p.crop].grow; }
   stage(p) { return p.state !== 'planted' ? -1 : this.ripe(p) ? 3 : Math.min(2, Math.floor(this.progress(p) * 3)); }
+  // one merged mesh per plot (a single draw call) built from the crop / grass models
+  plotMesh(parts) {
+    const geos = parts.map(([bundle, name, x, z, ry, sc]) => {
+      const g = Assets.geom(bundle, name).geometry.clone();
+      g.applyMatrix4(new THREE.Matrix4().compose(new THREE.Vector3(x, 0.08, z), new THREE.Quaternion().setFromEuler(new THREE.Euler(0, ry, 0)), new THREE.Vector3(sc, sc, sc)));
+      return g;
+    });
+    const m = new THREE.Mesh(mergeGeometries(geos), Assets.material(null));
+    m.castShadow = true; m.receiveShadow = true;
+    return m;
+  }
   refresh(p) {
     const g = p.group; g.clear(); p.shownStage = this.stage(p);
+    const rnd = (i) => ((Math.sin(p.id * 91.7 + i * 13.3) * 43758.5) % 1 + 1) % 1;
     if (p.state === 'grass') {
-      for (let i = 0; i < 6; i++) { const m = new THREE.Mesh(new THREE.ConeGeometry(0.1, 0.35, 4), this.weedMat); m.position.set((Math.random() - 0.5) * 1.1, 0.17, (Math.random() - 0.5) * 1.1); m.rotation.z = (Math.random() - 0.5) * 0.6; g.add(m); }
+      const parts = [];
+      for (let i = 0; i < 7; i++) parts.push(['nature', rnd(i) < 0.6 ? 'Grass' : 'Grass_Short', (rnd(i + 20) - 0.5) * 1.2, (rnd(i + 40) - 0.5) * 1.2, rnd(i + 60) * 6, 0.45 + rnd(i + 80) * 0.3]);
+      g.add(this.plotMesh(parts));
       return;
     }
     const soil = new THREE.Mesh(this.soilGeo, this.soilMat); soil.position.y = 0.03; soil.receiveShadow = true; g.add(soil);
-    for (let i = -1; i <= 1; i++) { const r = new THREE.Mesh(new THREE.BoxGeometry(1.3, 0.06, 0.18), this.soilMat); r.position.set(0, 0.09, i * 0.42); g.add(r); }
+    for (let i = -1; i <= 1; i++) { const r = new THREE.Mesh(this.rowGeo, this.soilMat); r.position.set(0, 0.09, i * 0.42); r.receiveShadow = true; g.add(r); }
     if (p.state !== 'planted') return;
-    const st = p.shownStage, c = CROPS[p.crop];
-    const k = [0.25, 0.5, 0.8, 1][st];
-    for (let i = 0; i < 9; i++) {
-      const x = ((i % 3) - 1) * 0.42, z = (Math.floor(i / 3) - 1) * 0.42;
-      if (p.crop === 'wheat') {
-        const col = st === 3 ? '#e2c35a' : st === 2 ? '#b8c04a' : '#6ab03a';
-        for (let j = 0; j < 3; j++) { const m = new THREE.Mesh(new THREE.ConeGeometry(0.035, 0.9 * k, 4), new THREE.MeshLambertMaterial({ color: col })); m.position.set(x + (j - 1) * 0.07, 0.1 + 0.45 * k, z + ((j * 7) % 3 - 1) * 0.05); m.rotation.z = (j - 1) * 0.15; m.castShadow = true; g.add(m); }
-      } else if (p.crop === 'carrot') {
-        const m = new THREE.Mesh(new THREE.ConeGeometry(0.12, 0.45 * k, 5), this.stemMat); m.position.set(x, 0.1 + 0.22 * k, z); m.castShadow = true; g.add(m);
-        if (st === 3) { const r = new THREE.Mesh(new THREE.ConeGeometry(0.06, 0.2, 6), new THREE.MeshLambertMaterial({ color: '#f08a24' })); r.position.set(x, 0.1, z); r.rotation.x = Math.PI; g.add(r); }
-      } else if (i % 4 === 0) {
-        const leaf = new THREE.Mesh(new THREE.SphereGeometry(0.25 * k + 0.1, 6, 4), this.stemMat); leaf.scale.y = 0.4; leaf.position.set(x, 0.12, z); g.add(leaf);
-        if (st >= 2 && i === 4) { const pk = new THREE.Mesh(new THREE.SphereGeometry(0.35 * k, 10, 8), new THREE.MeshStandardMaterial({ color: st === 3 ? '#e8781c' : '#8aa03a', roughness: 0.6 })); pk.scale.y = 0.75; pk.position.set(x, 0.1 + 0.25 * k, z); pk.castShadow = true; g.add(pk); }
-      }
+    const st = p.shownStage;
+    const name = { wheat: 'Wheat', carrot: 'Carrot', pumpkin: 'Pumpkin' }[p.crop] + '_' + (st + 1);
+    const parts = [];
+    if (p.crop === 'pumpkin') parts.push(['crops', name, 0, 0, rnd(1) * 6, 0.85]);
+    else for (let i = 0; i < 9; i++) {
+      const x = ((i % 3) - 1) * 0.42 + (rnd(i) - 0.5) * 0.08, z = (Math.floor(i / 3) - 1) * 0.42 + (rnd(i + 9) - 0.5) * 0.08;
+      if (p.crop === 'wheat') for (let k = 0; k < 3; k++) parts.push(['crops', name, x + (k - 1) * 0.08, z + (rnd(i * 3 + k) - 0.5) * 0.1, rnd(i + k) * 6, 0.9 + rnd(k + i) * 0.25]);
+      else parts.push(['crops', name, x, z, rnd(i) * 6, 0.5]);
     }
-    if (st === 3) { const s = new THREE.Sprite(new THREE.SpriteMaterial({ map: this.game.combat.glowTex, color: '#ffe08a', transparent: true, opacity: 0.5, depthWrite: false })); s.position.y = 0.8; s.scale.setScalar(0.6); g.add(s); }
+    g.add(this.plotMesh(parts));
+    if (st === 3) { const sp = new THREE.Sprite(new THREE.SpriteMaterial({ map: this.game.combat.glowTex, color: '#ffe08a', transparent: true, opacity: 0.45, depthWrite: false })); sp.position.y = 0.9; sp.scale.setScalar(0.6); g.add(sp); }
   }
   till(p) {
     const G = this.game; p.state = 'tilled'; this.refresh(p);

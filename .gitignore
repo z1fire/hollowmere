@@ -16,3 +16,7 @@ Thumbs.db
 .idea/
 *.iml
 node_modules/
+# asset pipeline workspace
+tools/node_modules/
+tools/.cache/
+tools/measure.json

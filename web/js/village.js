@@ -3,7 +3,7 @@ import { RNG, mtx, Batcher, cylGeo, distToSeg, angleDiff } from './util.js';
 import { Builder, polar } from './world.js';
 import { signTexture } from './textures.js';
 
-const DARK = '#4a3220', MID = '#7a5634', LIGHT = '#a07a50';
+const DARK = '#8a6a52', MID = '#b89878', LIGHT = '#d8c0a0';
 
 export const BTYPES = {
   townhall:  { w: 12, d: 9, h: 4.2, wall: 'plaster', roof: 'shingle', name: 'Town Hall', role: 'mayor' },
@@ -144,22 +144,22 @@ function buildBuilding(W, b, R) {
   B.box(wallKey, 0, (DH + h) / 2, hd - T / 2, DW, h - DH, T, wallColor, false);
   // timber framing
   if (wallKey === 'plaster') {
-    for (const [x, z] of [[-hw, -hd], [hw, -hd], [-hw, hd], [hw, hd]]) B.box('color', x, h / 2, z, 0.34, h, 0.34, DARK, false);
-    B.box('color', 0, h - 0.1, -hd - 0.02, w, 0.22, T + 0.1, DARK, false);
-    B.box('color', 0, h - 0.1, hd + 0.02, w, 0.22, T + 0.1, DARK, false);
-    B.box('color', -hw - 0.02, h - 0.1, 0, T + 0.1, 0.22, d, DARK, false);
-    B.box('color', hw + 0.02, h - 0.1, 0, T + 0.1, 0.22, d, DARK, false);
-    for (const s of [-1, 1]) for (let x = -hw + 2.2; x < hw - 1; x += 2.8) if (Math.abs(x) > 2.2) B.box('color', x, h / 2, s * (hd + 0.03), 0.18, h, 0.06, DARK, false);
-    for (const s of [-1, 1]) for (let z = -hd + 2.2; z < hd - 1; z += 2.8) B.box('color', s * (hw + 0.03), h / 2, z, 0.06, h, 0.18, DARK, false);
+    for (const [x, z] of [[-hw, -hd], [hw, -hd], [-hw, hd], [hw, hd]]) B.box('beam', x, h / 2, z, 0.34, h, 0.34, DARK, false);
+    B.box('beam', 0, h - 0.1, -hd - 0.02, w, 0.22, T + 0.1, DARK, false);
+    B.box('beam', 0, h - 0.1, hd + 0.02, w, 0.22, T + 0.1, DARK, false);
+    B.box('beam', -hw - 0.02, h - 0.1, 0, T + 0.1, 0.22, d, DARK, false);
+    B.box('beam', hw + 0.02, h - 0.1, 0, T + 0.1, 0.22, d, DARK, false);
+    for (const s of [-1, 1]) for (let x = -hw + 2.2; x < hw - 1; x += 2.8) if (Math.abs(x) > 2.2) B.box('beam', x, h / 2, s * (hd + 0.03), 0.18, h, 0.06, DARK, false);
+    for (const s of [-1, 1]) for (let z = -hd + 2.2; z < hd - 1; z += 2.8) B.box('beam', s * (hw + 0.03), h / 2, z, 0.06, h, 0.18, DARK, false);
   } else if (wallKey === 'stone') {
     for (const [x, z] of [[-hw, -hd], [hw, -hd], [-hw, hd], [hw, hd]]) B.box('stone', x, h / 2, z, 0.5, h + 0.1, 0.5, '#bdb8ae', false);
   } else {
     for (const [x, z] of [[-hw, -hd], [hw, -hd], [-hw, hd], [hw, hd]]) B.cyl('log', x, h / 2, z, 0.2, h + 0.2, '#ffffff', false, 8);
   }
   // door frame + open door
-  B.box('color', -DW / 2 - 0.08, DH / 2, hd, 0.16, DH, T + 0.14, DARK, false);
-  B.box('color', DW / 2 + 0.08, DH / 2, hd, 0.16, DH, T + 0.14, DARK, false);
-  B.box('color', 0, DH + 0.08, hd, DW + 0.32, 0.16, T + 0.14, DARK, false);
+  B.box('beam', -DW / 2 - 0.08, DH / 2, hd, 0.16, DH, T + 0.14, DARK, false);
+  B.box('beam', DW / 2 + 0.08, DH / 2, hd, 0.16, DH, T + 0.14, DARK, false);
+  B.box('beam', 0, DH + 0.08, hd, DW + 0.32, 0.16, T + 0.14, DARK, false);
   B.box('wood', DW / 2 - 0.05, DH / 2 + 0.02, hd - T - 0.72, 0.08, DH - 0.06, 1.45, '#8a5a30', true);
   // windows
   const winY = [1.6];
@@ -168,10 +168,10 @@ function buildBuilding(W, b, R) {
   const addWin = (x, z, rotated) => {
     for (const y of winY) {
       const wx = rotated ? T + 0.14 : 1.0, wz = rotated ? 1.0 : T + 0.14;
-      B.box('color', x, y, z, wx, 1.05, wz, DARK, false);
+      B.box('beam', x, y, z, wx, 1.05, wz, DARK, false);
       B.box('window', x, y, z, rotated ? T + 0.16 : 0.8, 0.85, rotated ? 0.8 : T + 0.16, null, false);
-      B.box('color', x, y, z, rotated ? T + 0.18 : 0.06, 0.85, rotated ? 0.06 : T + 0.18, DARK, false);
-      B.box('color', x, y, z, rotated ? T + 0.18 : 0.8, 0.06, rotated ? 0.8 : T + 0.18, DARK, false);
+      B.box('beam', x, y, z, rotated ? T + 0.18 : 0.06, 0.85, rotated ? 0.06 : T + 0.18, DARK, false);
+      B.box('beam', x, y, z, rotated ? T + 0.18 : 0.8, 0.06, rotated ? 0.8 : T + 0.18, DARK, false);
       // shutters
       if (b.type !== 'magetower' && b.type !== 'chapel') {
         const out = rotated ? Math.sign(x) : Math.sign(z);
@@ -246,100 +246,72 @@ function gableRoof(B, b, wallKey, wallColor) {
   const shape = new THREE.Shape([new THREE.Vector2(-S / 2, 0), new THREE.Vector2(S / 2, 0), new THREE.Vector2(0, rh)]);
   const tri = new THREE.ExtrudeGeometry(shape, { depth: 0.3, bevelEnabled: false }); tri.translate(0, 0, -0.15);
   for (const s of [1, -1]) B.add(wallKey, tri, frame.clone().multiply(mtx(s * (L / 2 - 0.15), h, 0, Math.PI / 2)), wallColor);
-  B.add('color', BOX, frame.clone().multiply(mtx(0, h + rh + 0.06, 0, 0, L + 2 * oh + 0.1, 0.2, 0.26)), '#3a2616');
+  B.add('beam', BOX, frame.clone().multiply(mtx(0, h + rh + 0.06, 0, 0, L + 2 * oh + 0.1, 0.2, 0.26)), '#6a5040');
   // rafters
-  for (let x = -L / 2 + 1; x < L / 2 - 0.5; x += 2) B.add('color', BOX, frame.clone().multiply(mtx(x, h - 0.05, 0, 0, 0.14, 0.14, S - 0.4)), DARK);
+  for (let x = -L / 2 + 1; x < L / 2 - 0.5; x += 2) B.add('beam', BOX, frame.clone().multiply(mtx(x, h - 0.05, 0, 0, 0.14, 0.14, S - 0.4)), DARK);
 }
 const BOX = new THREE.BoxGeometry(1, 1, 1);
 
 // ---------------- FURNITURE ----------------
 const F = {
   table(B, x, z, w = 1.4, d = 0.8, ry = 0) {
-    const s = B.sub(x, z, ry);
-    s.box('wood', 0, 0.76, 0, w, 0.07, d, MID, false);
-    for (const [a, c] of [[-1, -1], [1, -1], [-1, 1], [1, 1]]) s.box('color', a * (w / 2 - 0.08), 0.37, c * (d / 2 - 0.08), 0.08, 0.74, 0.08, DARK, false);
-    s.colBox(0, 0, w, d, 0, 0.8);
-    return s;
+    B.prop('dungeon', 'table_small', x, 0.04, z, ry, 1, { sx: w / 0.72, sy: 1.06, sz: d / 0.72 });
+    return B.sub(x, z, ry);
   },
   roundTable(B, x, z, r = 0.6) {
-    B.cyl('wood', x, 0.76, z, r, 0.07, MID, true, 12);
-    B.cyl('color', x, 0.38, z, 0.08, 0.74, DARK, false, 6);
+    B.prop('dungeon', 'table_small', x, 0.04, z, 0, 1, { sx: r * 2 / 0.72, sy: 1.06, sz: r * 2 / 0.72 });
   },
-  chair(B, x, z, ry = 0) {
-    const s = B.sub(x, z, ry);
-    s.box('wood', 0, 0.45, 0, 0.45, 0.06, 0.45, LIGHT, false);
-    s.box('wood', 0, 0.75, -0.2, 0.45, 0.55, 0.05, LIGHT, false);
-    for (const [a, c] of [[-1, -1], [1, -1], [-1, 1], [1, 1]]) s.box('color', a * 0.19, 0.22, c * 0.19, 0.05, 0.44, 0.05, DARK, false);
-    s.colBox(0, 0, 0.45, 0.45, 0, 1.0);
-  },
-  stool(B, x, z) { B.cyl('wood', x, 0.5, z, 0.2, 0.06, LIGHT, true, 8); B.cyl('color', x, 0.25, z, 0.05, 0.5, DARK, false, 5); },
-  bed(B, x, z, ry = 0, blanket = '#8a3a3a') {
-    const s = B.sub(x, z, ry);
-    s.box('wood', 0, 0.2, 0, 1.1, 0.4, 2.1, MID);
-    s.box('color', 0, 0.45, 0.05, 1.0, 0.14, 1.95, '#e8e0cc', false);
-    s.box('color', 0, 0.5, 0.25, 1.04, 0.1, 1.5, blanket, false);
-    s.box('color', 0, 0.56, -0.75, 0.7, 0.12, 0.35, '#fffaf0', false);
-    s.box('wood', 0, 0.55, -1.02, 1.1, 1.1, 0.08, DARK, false);
-    return s;
-  },
-  barrel(B, x, z, r = 0.34) {
-    B.cyl('wood', x, 0.45, z, r, 0.9, '#9a7048', true, 10, r * 0.88);
-    B.cyl('metal', x, 0.2, z, r + 0.01, 0.05, '#555', false, 10);
-    B.cyl('metal', x, 0.7, z, r * 0.95, 0.05, '#555', false, 10);
-  },
-  crate(B, x, z, s = 0.7, y = 0, ry = 0) {
-    B.box('wood', x, y + s / 2, z, s, s, s, '#b88a58', true, ry);
-    B.box('color', x, y + s / 2, z, s + 0.02, 0.08, s + 0.02, DARK, false, ry);
-  },
-  shelf(B, x, z, ry = 0, w = 1.8, items = ['#c84', '#48c', '#8c4', '#cc4', '#a4a']) {
-    const s = B.sub(x, z, ry);
-    s.box('wood', 0, 1.1, 0, w, 2.2, 0.08, DARK, false);
-    for (const y of [0.05, 0.6, 1.15, 1.7, 2.2]) s.box('wood', 0, y, 0.2, w, 0.05, 0.45, MID, false);
-    for (const x2 of [-w / 2, w / 2]) s.box('wood', x2, 1.1, 0.2, 0.05, 2.2, 0.45, MID, false);
-    const r = new RNG(Math.floor(x * 100 + z));
-    for (const y of [0.6, 1.15, 1.7]) for (let k = -w / 2 + 0.2; k < w / 2 - 0.1; k += 0.22) {
-      if (r.chance(0.25)) continue;
-      const hh = r.range(0.12, 0.3);
-      if (r.chance(0.5)) s.cyl('color', k, y + hh / 2 + 0.03, 0.2, 0.06, hh, r.pick(items), false, 6);
-      else s.box('color', k, y + hh / 2 + 0.03, 0.2, 0.15, hh, 0.2, r.pick(items), false);
-    }
-    s.colBox(0, 0.2, w, 0.5, 0, 2.2);
+  chair(B, x, z, ry = 0) { B.prop('dungeon', 'chair', x, 0.04, z, ry + Math.PI, 1); },
+  stool(B, x, z) { B.prop('dungeon', 'stool', x, 0.04, z, 0, 1); },
+  bed(B, x, z, ry = 0) { B.prop('furniture', 'bed_single_A', x, 0.04, z, ry + Math.PI, 1.12); return B.sub(x, z, ry); },
+  barrel(B, x, z, r = 0.36) { B.prop('dungeon', 'barrel_small', x, 0.04, z, (x * 7 + z) % 6, r * 2 / 0.72); },
+  crate(B, x, z, s = 0.7, y = 0, ry = 0) { B.prop('dungeon', 'box_small', x, y + 0.04, z, ry, s / 0.72); },
+  shelf(B, x, z, ry = 0, w = 1.8) {
+    B.prop('furniture', 'cabinet_medium_decorated', x, 0.04, z + 0, ry, 1, { sx: w / 1.26, sy: 1.25, sz: 0.85 });
   },
   bookshelf(B, x, z, ry = 0, w = 1.8) {
-    F.shelf(B, x, z, ry, w, ['#7a1a1a', '#1a3a7a', '#1a5a2a', '#6a4a1a', '#4a1a5a', '#8a6a2a']);
+    const s = B.sub(x, z, ry);
+    s.prop('furniture', 'cabinet_medium_decorated', 0, 0.04, 0.05, 0, 1, { sx: w / 1.26, sy: 1.25, sz: 0.85 });
+    for (let k = -w / 2 + 0.35; k < w / 2 - 0.2; k += 0.55) s.prop('furniture', 'book_set', k, 1.46, 0.05, 0, 1, { collide: false });
   },
   counter(B, x, z, len, ry = 0) {
     const s = B.sub(x, z, ry);
-    s.box('wood', 0, 0.5, 0, len, 1.0, 0.7, '#8a6038');
-    s.box('wood', 0, 1.03, 0, len + 0.1, 0.06, 0.8, LIGHT, false);
+    s.box('wood', 0, 0.5, 0, len, 1.0, 0.7, '#a07850');
+    s.box('beam', 0, 1.03, 0, len + 0.1, 0.06, 0.8, LIGHT, false);
+    s.prop('dungeon', 'candle_triple', len / 2 - 0.35, 1.06, 0, 0, 0.4, { collide: false });
+    s.prop('dungeon', 'bottle_A_brown', -len / 2 + 0.4, 1.06, 0.05, 0, 0.3, { collide: false });
+    s.prop('dungeon', 'bottle_B_green', -len / 2 + 0.7, 1.06, -0.1, 0, 0.3, { collide: false });
     return s;
   },
   fireplace(B, x, z, ry = 0, W) {
     const s = B.sub(x, z, ry);
-    s.box('stone', 0, 0.9, 0, 1.8, 1.8, 0.8, '#b0aaa0');
+    s.box('stone', 0, 0.9, 0, 1.8, 1.8, 0.8, '#d0c8bc');
     s.box('color', 0, 0.45, 0.41, 1.0, 0.8, 0.02, '#1a1410', false);
     s.box('fire', 0, 0.3, 0.3, 0.6, 0.35, 0.25, '#ff8a2a', false);
     s.box('fire', 0, 0.45, 0.3, 0.3, 0.3, 0.2, '#ffd35a', false);
-    s.box('stone', 0, 2.5, -0.1, 1.0, 1.6, 0.5, '#a09a90', false);
-    s.box('wood', 0, 1.85, 0.2, 2.0, 0.1, 0.5, DARK, false);
+    s.box('stone', 0, 2.5, -0.1, 1.0, 1.6, 0.5, '#c8c0b4', false);
+    s.box('beam', 0, 1.85, 0.2, 2.0, 0.1, 0.5, DARK, false);
+    s.prop('dungeon', 'candle_triple', 0.6, 1.9, 0.2, 0, 0.55, { collide: false });
+    s.prop('dungeon', 'bottle_A_green', -0.6, 1.9, 0.25, 0, 0.45, { collide: false });
   },
-  rug(B, x, z, w, d, color, ry = 0) { B.box('color', x, 0.065, z, w, 0.02, d, color, false, ry); B.box('color', x, 0.06, z, w + 0.12, 0.015, d + 0.12, '#d8b860', false, ry); },
+  rug(B, x, z, w, d, color, ry = 0) {
+    B.prop('furniture', (Math.abs(x * 13 + z * 7) | 0) % 2 ? 'rug_rectangle_A' : 'rug_rectangle_stripes_A', x, 0.05, z, ry, 1, { sx: w / 1.86, sy: 0.6, sz: d / 1.24, collide: false });
+  },
   pew(B, x, z, len = 2.6) {
-    B.box('wood', x, 0.45, z, len, 0.07, 0.45, MID);
-    B.box('wood', x, 0.8, z - 0.22, len, 0.6, 0.06, MID, false);
-    for (const s of [-1, 1]) B.box('wood', x + s * (len / 2 - 0.05), 0.45, z, 0.06, 0.9, 0.5, DARK, false);
+    B.box('wood', x, 0.45, z, len, 0.07, 0.45, '#a07850');
+    B.box('beam', x, 0.8, z - 0.22, len, 0.6, 0.06, MID, false);
+    for (const s of [-1, 1]) B.box('beam', x + s * (len / 2 - 0.05), 0.45, z, 0.06, 0.9, 0.5, DARK, false);
   },
-  candle(B, x, y, z) { B.cyl('color', x, y + 0.1, z, 0.03, 0.2, '#f4ecd8', false, 6); B.box('fire', x, y + 0.24, z, 0.04, 0.07, 0.04, '#ffd35a', false); },
+  candle(B, x, y, z) { B.prop('dungeon', 'candle_lit', x, y, z, 0, 0.38, { collide: false }); },
   rack(B, x, z, ry, kind) {
     const s = B.sub(x, z, ry);
-    s.box('wood', 0, 1.0, 0, 1.6, 0.08, 0.1, DARK, false); s.box('wood', 0, 0.4, 0, 1.6, 0.08, 0.1, DARK, false);
-    for (const k of [-0.8, 0.8]) s.box('wood', k, 0.8, 0, 0.08, 1.6, 0.1, DARK, false);
-    for (let k = -0.5; k <= 0.5; k += 0.33) {
-      if (kind === 'bow') { s.geo('color', new THREE.TorusGeometry(0.55, 0.025, 4, 12, Math.PI), k, 0.9, 0.08, 0, '#6b4a2b', 1, 1, 1, 0, -Math.PI / 2); }
-      else { s.box('metal', k, 0.95, 0.08, 0.06, 1.1, 0.015, '#c8ccd0', false); s.box('color', k, 0.4, 0.08, 0.2, 0.04, 0.05, '#555', false); }
-    }
-    s.colBox(0, 0, 1.6, 0.4, 0, 1.6);
+    if (kind === 'bow') {
+      s.box('beam', 0, 1.3, -0.05, 1.8, 0.1, 0.1, DARK, false);
+      for (const k of [-0.55, 0, 0.55]) s.prop('village', 'Bow_Wooden', k, 1.35, 0.05, 0, 0.55, { collide: false });
+    } else s.prop('dungeon', 'sword_shield', 0, 1.9, 0.1, 0, 0.8, { collide: false });
   },
+  banner(B, x, y, z, ry, name) { B.prop('dungeon', name, x, y - 2.3, z, ry, 0.8, { collide: false }); },
+  torch(B, x, y, z, ry) { B.prop('dungeon', 'torch_mounted', x, y, z, ry, 0.8, { collide: false }); },
 };
 
 // ---------------- INTERIORS ----------------
@@ -350,7 +322,10 @@ const INTERIORS = {
     F.table(B, 0, -hd + 2.3, 3.2, 1.0);
     F.chair(B, 0, -hd + 1.4, 0);
     for (const x of [-1, 1]) F.bookshelf(B, x * (hw - 1.5), -hd + 0.35, 0, 2);
-    for (const x of [-2.4, 2.4]) { B.box('color', x, 2.6, -hd + 0.32, 0.9, 1.6, 0.03, x < 0 ? '#7a1a2a' : '#1a3a7a', false); B.box('color', x, 3.45, -hd + 0.33, 1.0, 0.08, 0.05, '#d8b860', false); }
+    F.banner(B, -2.6, 3.7, -hd + 0.3, 0, 'banner_patternA_red'); F.banner(B, 2.6, 3.7, -hd + 0.3, 0, 'banner_patternB_blue');
+    B.prop('dungeon', 'table_small_decorated_A', 0.9, 0.84, -hd + 2.3, 0, 0.5, { collide: false });
+    B.prop('dungeon', 'chest_gold', hw - 0.8, 0.04, hd - 1.4, -Math.PI / 2, 0.6);
+    for (const s of [-1, 1]) F.torch(B, s * (hw - 0.3), 2.2, 0.8, s > 0 ? -Math.PI / 2 : Math.PI / 2);
     for (const s of [-1, 1]) for (let z = -1; z <= 2; z += 1.6) F.pew(B, s * (hw - 1.4), z, 1.8);
     F.candle(B, -1.2, 0.8, -hd + 2.3); F.candle(B, 1.2, 0.8, -hd + 2.3);
     B.box('color', 0.3, 0.81, -hd + 2.3, 0.4, 0.02, 0.3, '#f4ecd8', false);
@@ -361,16 +336,20 @@ const INTERIORS = {
     F.counter(B, -hw + 2.3, -0.8, 5, Math.PI / 2);
     F.shelf(B, -hw + 0.35, -0.8, Math.PI / 2, 3.2, ['#6a3a1a', '#3a6a2a', '#8a2a2a', '#c8a040']);
     F.barrel(B, -hw + 0.7, hd - 1.0); F.barrel(B, -hw + 1.4, hd - 0.8); F.barrel(B, -hw + 0.7, -hd + 0.8);
-    B.cyl('color', -hw + 2.3, 1.14, 0.8, 0.07, 0.16, '#8a6a3a', false, 8);
+    B.prop('weapons', 'mug_full', -hw + 2.3, 1.06, 0.8, 0, 0.3, { collide: false });
+    B.prop('dungeon', 'keg_decorated', -hw + 0.9, 0.04, 2.2, Math.PI / 2, 0.55);
+    B.prop('dungeon', 'barrel_small_stack', hw - 1.0, 0.04, hd - 1.2, 0, 0.6);
+    F.banner(B, 0, 3.6, -hd + 0.3, 0, 'banner_triple_yellow');
+    F.torch(B, hw - 0.3, 2.2, -1, -Math.PI / 2); F.torch(B, hw - 0.3, 2.2, 2.5, -Math.PI / 2);
     F.fireplace(B, hw - 2.2, -hd + 0.6, 0);
     const tables = [[1.2, -1.6], [3.4, 0.6], [0.6, 1.8], [3.6, 2.8]];
     for (const [x, z] of tables) {
       F.roundTable(B, x, z, 0.6);
       for (let k = 0; k < 3; k++) { const a = k * 2.1 + x; F.stool(B, x + Math.sin(a) * 0.95, z + Math.cos(a) * 0.95); }
-      B.cyl('color', x + 0.2, 0.87, z, 0.07, 0.16, '#8a6a3a', false, 8);
+      B.prop('dungeon', R.pick(['plate_food_A', 'plate_food_B']), x - 0.1, 0.84, z, R.range(0, 6), 0.3, { collide: false });
+      B.prop('weapons', 'mug_full', x + 0.3, 0.84, z + 0.1, R.range(0, 6), 0.25, { collide: false });
     }
     F.rug(B, 2.2, 0.4, 3.5, 4.5, '#6a3a2a');
-    B.box('color', hw - 0.35, 2.4, 1.5, 0.05, 1.2, 1.6, '#3a5a2a', false);
     npc('innkeeper', -hw + 1.3, -0.8, Math.PI / 2);
     npc('patron', 1.2, -0.6, Math.PI, { sit: true });
     npc('patron', 3.4, 1.55, 0.4 + Math.PI, { sit: true });
@@ -394,6 +373,9 @@ const INTERIORS = {
     F.table(B, hw - 1.2, -hd + 1.0, 1.6, 0.8);
     B.box('metal', hw - 1.4, 0.83, -hd + 1.0, 0.8, 0.04, 0.12, '#c8ccd0', false);
     F.crate(B, hw - 0.8, hd - 1.2);
+    B.prop('village', 'Hammer_Double', hw - 1.1, 0.84, -hd + 1.2, 1.2, 0.3, { collide: false });
+    B.prop('dungeon', 'box_stacked', hw - 1.0, 0.04, hd - 2.4, 0, 0.35);
+    F.torch(B, -hw + 0.3, 2.2, 1.5, Math.PI / 2);
     npc('smith', 0.4, 0.4, 0);
   },
   store(B, b, R, npc) {
@@ -401,19 +383,23 @@ const INTERIORS = {
     F.counter(B, 0, -hd + 2.2, 4.4);
     for (const x of [-2.3, 0, 2.3]) F.shelf(B, x, -hd + 0.35, 0, 2.1, ['#c84', '#48c', '#8c4', '#cc4', '#a4a', '#e66']);
     F.barrel(B, -hw + 0.8, 0.6); F.barrel(B, -hw + 0.8, 1.5); F.crate(B, hw - 0.8, 0.8); F.crate(B, hw - 0.8, 1.6, 0.6); F.crate(B, hw - 0.8, 0.8, 0.5, 0.7);
-    for (let k = 0; k < 3; k++) B.geo('color', new THREE.SphereGeometry(0.28, 8, 6), -hw + 1.8, 0.28, 0.2 + k * 0.6, 0, '#c8b890', 1, 1.2, 1);
-    B.cyl('color', 1.4, 1.2, -hd + 2.2, 0.15, 0.25, '#e8781c', false, 8);
+    for (let k = 0; k < 3; k++) B.prop('village', 'Bags', -hw + 1.8, 0.04, 0.2 + k * 0.6, k, 2.2);
+    B.prop('halloween', 'pumpkin_orange', 1.4, 1.06, -hd + 2.2, 0, 0.4, { collide: false });
+    B.prop('village', 'Potion1_Filled', -1.2, 1.06, -hd + 2.2, 0, 0.25, { collide: false });
+    B.prop('village', 'Potion2_Filled', -0.8, 1.06, -hd + 2.2, 0, 0.22, { collide: false });
+    B.prop('village', 'Package_1', hw - 1.2, 0.04, -0.6, 0.4, 2.2);
     F.rug(B, 0, 1.2, 2.5, 2.4, '#2a5a4a');
     npc('merchant', 0, -hd + 1.3, 0);
   },
   herbalist(B, b, R, npc, W) {
     const { w, d } = b, hw = w / 2, hd = d / 2;
-    B.cyl('metal', -1.0, 0.4, -0.8, 0.55, 0.7, '#2a2a2a', true, 12, 0.6);
-    B.cyl('glow', -1.0, 0.76, -0.8, 0.5, 0.04, '#5aff8a', false, 12);
+    B.prop('village', 'Cauldron', -1.0, 0.04, -0.8, 0, 3.2);
+    B.cyl('glow', -1.0, 0.62, -0.8, 0.42, 0.04, '#5aff8a', false, 12);
     B.box('fire', -1.0, 0.05, -0.8, 0.6, 0.08, 0.6, '#ff7a2a', false);
     F.shelf(B, 0.8, -hd + 0.35, 0, 2.2, ['#3a8a3a', '#8a3a8a', '#3a6a8a', '#8a8a3a', '#aa5522']);
     F.table(B, hw - 0.9, 0.3, 1.4, 0.8, Math.PI / 2);
     for (let k = 0; k < 6; k++) B.box('color', -hw + 0.8 + k * 0.9, b.h - 0.5, 1.0, 0.12, 0.5, 0.12, R.pick(['#4a7a2a', '#6a8a2a', '#3a5a2a', '#8a6a3a']), false);
+    for (let k = 0; k < 3; k++) B.prop('village', R.pick(['Potion1_Filled', 'Potion2_Filled', 'Potion4_Filled']), hw - 0.9, 0.84, -0.1 + k * 0.35, k, 0.22, { collide: false });
     F.rug(B, -0.4, 1, 2.2, 2.2, '#4a6a2a');
     npc('herbalist', 0.3, -0.5, 0);
   },
@@ -422,11 +408,12 @@ const INTERIORS = {
     for (const [x, z, r] of [[-hw + 0.35, -0.5, Math.PI / 2], [hw - 0.35, -0.5, -Math.PI / 2]]) F.bookshelf(B, x, z, r, 2.8);
     F.bookshelf(B, 0, -hd + 0.35, 0, 2.6);
     B.cyl('stone', 1.6, 0.45, -1.6, 0.35, 0.9, '#8a8aa0', true, 8);
-    const crystal = new THREE.Mesh(new THREE.OctahedronGeometry(0.35), new THREE.MeshBasicMaterial({ color: '#b98aff' }));
+    const crystal = new THREE.Mesh(new THREE.OctahedronGeometry(0.35), new THREE.MeshStandardMaterial({ color: '#b98aff', emissive: '#7a3aff', emissiveIntensity: 2, roughness: 0.2 }));
     const cp = B.P(1.6, -1.6, 1.4); crystal.position.copy(cp); W.scene.add(crystal);
     W.animated.push((dt, t) => { crystal.rotation.y += dt; crystal.position.y = cp.y + Math.sin(t * 2) * 0.08; });
     F.table(B, -0.8, 0.8, 1.4, 0.8);
-    B.box('color', -0.9, 0.81, 0.8, 0.5, 0.02, 0.35, '#f0e0b0', false);
+    B.prop('weapons', 'spellbook_open', -0.9, 0.84, 0.8, 0.3, 0.35, { collide: false });
+    B.prop('village', 'Scroll', -0.4, 0.84, 0.6, 1, 0.3, { collide: false });
     F.candle(B, -0.3, 0.8, 0.8);
     B.geo('color', new THREE.CircleGeometry(1.6, 24), 0, 0.07, 0.4, 0, '#2a2a6a', 1, 1, 1, -Math.PI / 2);
     // ladder to the upper floors
@@ -440,20 +427,13 @@ const INTERIORS = {
     F.table(B, 0.8, -0.6, 1.4, 0.8);
     F.bed(B, hw - 0.9, -hd + 1.4, 0, '#5a6a3a');
     F.rug(B, -0.3, 0.8, 2.4, 1.8, '#8a8580');
-    // mounted antlers
-    B.box('wood', 0, 2.3, -hd + 0.34, 0.5, 0.6, 0.05, DARK, false);
-    B.box('color', 0, 2.3, -hd + 0.45, 0.25, 0.35, 0.2, '#7a5a3a', false);
-    for (const s of [-1, 1]) { B.box('color', s * 0.3, 2.65, -hd + 0.45, 0.4, 0.05, 0.05, '#e8dcc0', false, 0); B.box('color', s * 0.45, 2.8, -hd + 0.45, 0.05, 0.3, 0.05, '#e8dcc0', false); }
+    B.prop('dungeon', 'trunk_large_A', 0.8, 0.04, hd - 1.0, 0, 0.7);
+    B.prop('weapons', 'quiver', 1.2, 0.84, -0.6, 0.4, 0.5, { collide: false });
     F.barrel(B, -hw + 0.8, hd - 1.0);
     npc('hunter', 0.8, -1.4, 0);
     // archery targets outside
-    for (const s of [-1, 1]) {
-      const t = B.sub(s * (hw + 2.5), 1.5, 0);
-      t.cyl('color', 0, 0.9, 0, 0.1, 1.8, DARK, true, 5);
-      t.geo('color', new THREE.CylinderGeometry(0.55, 0.55, 0.15, 16), 0, 1.3, 0.12, 0, '#e8dcc0', 1, 1, 1, Math.PI / 2);
-      t.geo('color', new THREE.CylinderGeometry(0.35, 0.35, 0.16, 16), 0, 1.3, 0.12, 0, '#c83a3a', 1, 1, 1, Math.PI / 2);
-      t.geo('color', new THREE.CylinderGeometry(0.14, 0.14, 0.17, 12), 0, 1.3, 0.12, 0, '#ffd84a', 1, 1, 1, Math.PI / 2);
-    }
+    for (const s of [-1, 1]) B.prop('village', s > 0 ? 'TargetWithArrows' : 'Target', s * (hw + 2.5), -0.04, 1.5, 0, 2.6);
+    B.prop('village', 'Dummy', hw + 2.5, -0.04, 4.5, 0, 1.6);
   },
   chapel(B, b, R, npc) {
     const { w, d } = b, hw = w / 2, hd = d / 2;
@@ -462,10 +442,11 @@ const INTERIORS = {
     B.box('color', 0, 1.02, -hd + 1.6, 2.1, 0.03, 1.0, '#e8e0f0', false);
     B.box('color', 0, 0.7, -hd + 2.06, 0.6, 0.6, 0.02, '#c8a040', false);
     for (const x of [-0.8, -0.4, 0.4, 0.8]) F.candle(B, x, 1.03, -hd + 1.5);
+    for (const s of [-1, 1]) { B.prop('halloween', 'candle_triple', s * 1.6, 0.04, -hd + 1.4, 0, 0.8, { collide: false }); F.banner(B, s * 2.4, 4.2, -hd + 0.3, 0, 'banner_patternC_white'); }
     // stained glass
     const cols = ['#ff5a5a', '#5a8aff', '#ffd84a', '#5aff8a'];
     for (let i = 0; i < 4; i++) B.box('glow', -0.6 + (i % 2) * 1.2, 2.6 + Math.floor(i / 2) * 1.0, -hd + 0.14, 1.1, 0.9, 0.04, cols[i], false);
-    B.box('color', 0, 3.1, -hd + 0.13, 0.08, 2.0, 0.06, DARK, false); B.box('color', 0, 3.1, -hd + 0.13, 2.4, 0.08, 0.06, DARK, false);
+    B.box('beam', 0, 3.1, -hd + 0.13, 0.08, 2.0, 0.06, DARK, false); B.box('beam', 0, 3.1, -hd + 0.13, 2.4, 0.08, 0.06, DARK, false);
     F.rug(B, 0, 0.5, 1.4, d - 3.5, '#6a1a2a');
     npc('priest', 0, -hd + 0.8, 0);
   },
@@ -476,6 +457,8 @@ const INTERIORS = {
     F.chair(B, 1.0, -0.5, 0); F.chair(B, 1.0, 1.1, Math.PI);
     F.fireplace(B, hw - 1.4, -hd + 0.6, 0);
     F.crate(B, -hw + 0.6, hd - 1.2, 0.6);
+    B.prop('dungeon', 'trunk_medium_B', -hw + 0.8, 0.04, -hd + 2.8, Math.PI / 2, 0.8);
+    B.prop('dungeon', R.pick(['plate_food_A', 'plate_food_B']), 1.0, 0.84, 0.3, 0, 0.35, { collide: false });
     F.rug(B, 0, 0.5, 2, 1.6, R.pick(['#6a3a2a', '#3a4a6a', '#5a4a2a']));
   },
   farmhouse(B, b, R, npc, W) {
@@ -484,7 +467,9 @@ const INTERIORS = {
     const bp = B.P(-hw + 0.9, -hd + 1.4);
     W.interactables.push({ type: 'bed', x: bp.x, y: b.floorY + 0.6, z: bp.z, r: 1.8, label: 'Sleep & Save' });
     F.table(B, 0.8, 0.0, 1.4, 0.8); F.chair(B, 0.8, -0.8, 0); F.chair(B, 0.8, 0.8, Math.PI);
-    B.cyl('color', 0.6, 0.85, 0, 0.12, 0.15, '#c8b890', false, 8);
+    B.prop('dungeon', 'plate_food_A', 0.8, 0.84, 0, 0, 0.35, { collide: false });
+    B.prop('weapons', 'mug_full', 0.4, 0.84, 0.25, 0, 0.25, { collide: false });
+    B.prop('dungeon', 'trunk_large_A', -hw + 0.9, 0.04, -hd + 3.2, Math.PI / 2, 0.6);
     F.fireplace(B, hw - 1.4, -hd + 0.6, 0);
     F.shelf(B, -1.0, -hd + 0.35, 0, 1.4, ['#c84', '#8c4', '#cc4']);
     F.crate(B, -hw + 0.6, hd - 1.2, 0.6); F.barrel(B, -hw + 0.6, hd - 2.2);
@@ -530,7 +515,9 @@ function buildFarmField(W, R) {
   sc.geo('color', new THREE.ConeGeometry(0.35, 0.3, 10), 0, 2.1, 0, 0, '#d8b860');
   // haystacks & barn-shed near the farmhouse
   const hB = Builder.at(W, batch, f.x, W.plazaY, f.z, ang);
-  for (const [x, z] of [[-7.5, 1.5], [-7.5, -1.2]]) hB.geo('color', new THREE.CylinderGeometry(0.9, 1.1, 1.3, 10), x, 0.65, z, 0, '#d8b860'), hB.w.addCircle(hB.P(x, z).x, hB.P(x, z).z, 1.0, W.plazaY, W.plazaY + 1.3);
+  for (const [x, z] of [[-7.5, 1.5], [-7.5, -1.2], [-8.8, 0.2]]) hB.prop('village', 'Hay', x, 0, z, x + z, 7.5);
+  hB.prop('village', 'Cart', -9.5, 0, -4, 0.6, 2.3);
+  hB.prop('dungeon', 'barrel_small', -6, 0, 3.6, 0, 1);
   hB.box('wood', -7.5, 0.3, 4.5, 2.2, 0.6, 1.0, '#8a6038'); // trough
   hB.box('color', -7.5, 0.58, 4.5, 2.0, 0.04, 0.8, '#3a6a8a', false);
   W.scene.add(batch.build(W.M));
@@ -546,12 +533,8 @@ function buildPlaza(W, R) {
   const B = Builder.at(W, batch, 0, y, 0, 0);
   B.geo('cobble', new THREE.CircleGeometry(12.5, 48), 0, 0.05, 0, 0, '#d8d0c4', 1, 1, 1, -Math.PI / 2);
   // well
-  B.cyl('stone', 0, 0.45, 0, 1.2, 0.9, '#b8b2a8', true, 14);
-  B.cyl('color', 0, 0.86, 0, 1.0, 0.04, '#1e3a4a', false, 14);
-  for (const s of [-1, 1]) B.box('wood', s * 1.05, 1.5, 0, 0.14, 2.2, 0.14, DARK, false);
-  B.box('wood', 0, 2.5, 0, 2.4, 0.14, 0.14, DARK, false);
-  B.geo('thatch', new THREE.ConeGeometry(1.8, 1.0, 4), 0, 3.05, 0, Math.PI / 4, '#ffffff');
-  B.cyl('wood', 0.2, 1.9, 0, 0.18, 0.35, '#8a6038', false, 8);
+  B.prop('village', 'Well', 0, 0.05, 0, 0, 2.6, { collide: false });
+  W.addCircle(0, 0, 1.3, y - 1, y + 3);
   W.interactables.push({ type: 'well', x: 0, y: y + 1, z: 0, r: 2.3, label: 'Drink from well' });
   W.mapLabels.push({ x: 0, z: -3, text: 'Plaza' });
   // quest board
@@ -566,18 +549,12 @@ function buildPlaza(W, R) {
   for (let i = 0; i < 3; i++) {
     const a = W.gates[i] + Math.PI / 3 + R.range(-0.25, 0.25);
     const p = polar(a, 10.5);
-    const st = B.sub(p.x, p.z, a + Math.PI);
-    const cloth = R.pick(['#c83a3a', '#3a7ac8', '#e0a030', '#3a9a5a']);
-    st.box('wood', 0, 0.45, 0, 2.4, 0.9, 1.0, MID);
-    for (const [sx, sz] of [[-1.15, -0.45], [1.15, -0.45], [-1.15, 0.45], [1.15, 0.45]]) st.box('wood', sx, 1.25, sz, 0.08, 2.5, 0.08, DARK, false);
-    st.box('color', 0, 2.5, 0, 2.6, 0.06, 1.4, cloth, false, 0);
-    for (let k = 0; k < 6; k++) st.geo('color', new THREE.SphereGeometry(0.12, 6, 5), -0.9 + k * 0.36, 0.98, R.range(-0.2, 0.2), 0, R.pick(['#e8781c', '#c83a3a', '#8ac83a', '#e8d84a']));
+    B.prop('village', i % 2 ? 'MarketStand_1' : 'MarketStand_2', p.x, 0.05, p.z, a + Math.PI, 2.3);
   }
   // benches
   for (let i = 0; i < 3; i++) {
     const a = W.gates[i] - Math.PI / 3 + R.range(-0.2, 0.2);
-    const p = polar(a, 5); const bn = B.sub(p.x, p.z, a);
-    bn.box('wood', 0, 0.45, 0, 1.8, 0.08, 0.45, MID); for (const s of [-1, 1]) bn.box('stone', s * 0.7, 0.22, 0, 0.2, 0.44, 0.4, '#9a958c', false);
+    const p = polar(a, 5.5); B.prop('village', 'Bench_1', p.x, 0.05, p.z, a, 2.6);
   }
   W.scene.add(batch.build(W.M));
 }
@@ -611,15 +588,15 @@ function buildFence(W, R) {
   W.gates.forEach((g, i) => {
     const p = polar(g, FR); const y = W.heightAt(p.x, p.z);
     const G = B.sub(p.x, p.z, g, y);
-    for (const s of [-1, 1]) { G.box('log', s * 3.1, 2.0, 0, 0.45, 4.0, 0.45, '#ffffff'); G.geo('wood', new THREE.ConeGeometry(0.3, 0.5, 4), s * 3.1, 4.25, 0, 0, DARK); }
-    G.box('log', 0, 3.7, 0, 6.8, 0.35, 0.35, '#ffffff', false);
+    for (const s of [-1, 1]) G.prop('village', 'Watchtower', s * 4.0, -0.2, 0, 0, 2.3);
+    G.box('log', 0, 3.9, 0, 5.2, 0.35, 0.35, '#ffffff', false);
     const sign = new THREE.Mesh(new THREE.PlaneGeometry(2.6, 0.65), new THREE.MeshStandardMaterial({ map: signTexture(`→ ${names[i]}`), side: THREE.DoubleSide, roughness: 0.8 }));
     sign.position.copy(G.P(0, 0.2, 3.2)); sign.rotation.y = g + Math.PI; W.scene.add(sign);
     const sign2 = new THREE.Mesh(new THREE.PlaneGeometry(2.6, 0.65), new THREE.MeshStandardMaterial({ map: signTexture('Hollowmere'), side: THREE.DoubleSide, roughness: 0.8 }));
     sign2.position.copy(G.P(0, -0.2, 3.2)); sign2.rotation.y = g; W.scene.add(sign2);
     if (i === 0) { const gp = G.P(2.2, -1.5); W.npcSpots.push({ role: 'guard', x: gp.x, z: gp.z, y, yaw: g + Math.PI }); }
     // torches
-    for (const s of [-1, 1]) { G.box('fire', s * 3.1, 3.2, -0.3, 0.12, 0.2, 0.12, '#ffb04a', false); }
+    for (const s of [-1, 1]) { G.box('fire', s * 2.4, 3.3, -0.25, 0.12, 0.2, 0.12, '#ffb04a', false); }
   });
   W.scene.add(batch.build(W.M));
 }
@@ -651,8 +628,8 @@ function buildVillageProps(W, R) {
       const side = R.chance(0.5) ? -1 : 1;
       const x = side * (b.w / 2 + 0.7), z = R.range(-b.d / 2 + 0.8, b.d / 2 - 0.5);
       const t = R.int(0, 3);
-      if (t === 0) F.barrel(S, x, z);
-      else if (t === 1) F.crate(S, x, z, R.range(0.5, 0.8), 0, R.range(0, 1));
+      if (t === 0) F.barrel(S, x, z, 0.38);
+      else if (t === 1) S.prop('dungeon', R.pick(['crates_stacked', 'box_large', 'box_small']), x, 0, z, R.int(0, 3) * Math.PI / 2, 0.55);
       else if (t === 2) { // wood pile
         for (let i = 0; i < 3; i++) for (let j = 0; j < 3 - i; j++) S.add('log', cylGeo(0.14, 0.14, 1.4, 7), mtx(x, 0.15 + i * 0.26, z - 0.3 + j * 0.3 + i * 0.15, 0, 1, 1, 1, Math.PI / 2), '#ffffff');
         S.colBox(x, z, 1.4, 1.0, 0, 0.8, 0);
@@ -664,12 +641,7 @@ function buildVillageProps(W, R) {
   }
   // cart near plaza
   const cp = polar(W.gates[1] + Math.PI / 3 + 0.35, 14.5);
-  const C = B.sub(cp.x, cp.z, R.range(0, 6), W.plazaY);
-  C.box('wood', 0, 0.75, 0, 1.4, 0.12, 2.2, MID); for (const s of [-1, 1]) C.box('wood', s * 0.7, 0.95, 0, 0.06, 0.4, 2.2, MID, false);
-  for (const s of [-1, 1]) C.geo('wood', new THREE.CylinderGeometry(0.45, 0.45, 0.1, 12), s * 0.78, 0.45, 0, 0, DARK, 1, 1, 1, 0, Math.PI / 2);
-  C.box('wood', 0, 0.6, 1.6, 0.08, 0.08, 1.4, DARK, false);
-  C.colBox(0, 0, 1.6, 2.4, 0, 1.2);
-  for (let k = 0; k < 3; k++) C.geo('color', new THREE.SphereGeometry(0.3, 8, 6), R.range(-0.3, 0.3), 1.05, -0.6 + k * 0.6, 0, '#e8781c');
+  B.sub(cp.x, cp.z, 0, W.plazaY).prop('village', 'Cart', 0, 0, 0, R.range(0, 6), 2.3);
   W.scene.add(batch.build(W.M));
 }
 

@@ -1,0 +1,16 @@
+{
+  "name": "hollowmere-tools",
+  "private": true,
+  "type": "module",
+  "description": "Asset pipeline: downloads CC0 source assets and writes optimized files to web/assets",
+  "scripts": {
+    "assets": "node build-assets.mjs"
+  },
+  "dependencies": {
+    "@gltf-transform/core": "^4.1.0",
+    "@gltf-transform/extensions": "^4.1.0",
+    "@gltf-transform/functions": "^4.1.0",
+    "meshoptimizer": "^1.3.0",
+    "sharp": "^0.35.5"
+  }
+}

@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { RNG, makeNoise2D, fbm, clamp, lerp, smoothstep, distToSeg, angleDiff, mtx, Batcher, cylGeo, compoundGeometry } from './util.js';
 import { makeTextures } from './textures.js';
+import { Assets, PropField, propSize } from './assets.js';
 import { planVillage, buildVillage } from './village.js';
 import { buildWilds, herbsAndChests } from './wilds.js';
 
@@ -33,6 +34,21 @@ export class Builder {
     if (col) { const p = this.P(lx, lz); this.w.addCircle(p.x, p.z, Math.max(r, rt ?? 0), this.y + ly - h / 2, this.y + ly + h / 2); }
   }
   geo(key, g, lx, ly, lz, ry = 0, color, sx = 1, sy = 1, sz = 1, rx = 0, rz = 0) { this.add(key, g, mtx(lx, ly, lz, ry, sx, sy, sz, rx, rz), color); }
+  // place a model prop in this local frame (ry multiples of 90° keep box colliders tight)
+  prop(bundle, name, lx, ly, lz, ry = 0, s = 1, opts = {}) {
+    const local = mtx(lx, ly, lz, ry, opts.sx ?? s, opts.sy ?? s, opts.sz ?? s);
+    const m = new THREE.Matrix4().multiplyMatrices(this.m, local);
+    this.w.props.add(bundle, name, m, opts.tint);
+    if (opts.collide !== false) {
+      const z = propSize(bundle, name);
+      const sx = z.sx * (opts.sx ?? s), sz = z.sz * (opts.sz ?? s), sy = z.maxY * (opts.sy ?? s);
+      const cx = z.cx * (opts.sx ?? s), cz = z.cz * (opts.sz ?? s);
+      const c = Math.cos(ry), sn = Math.sin(ry);
+      const px = lx + cx * c + cz * sn, pz = lz - cx * sn + cz * c;
+      if (Math.abs(Math.sin(2 * ry)) < 0.1) this.colBox(px, pz, sx * (opts.shrink ?? 0.9), sz * (opts.shrink ?? 0.9), ly, ly + Math.max(0.3, sy), ry);
+      else { const p = this.P(px, pz); this.w.addCircle(p.x, p.z, Math.max(sx, sz) * 0.42, this.y + ly, this.y + ly + sy); }
+    }
+  }
   floor(minX, maxX, minZ, maxZ, ly) {
     const a = this.P(minX, minZ), b = this.P(maxX, maxZ);
     this.w.addFloor(Math.min(a.x, b.x), Math.max(a.x, b.x), Math.min(a.z, b.z), Math.max(a.z, b.z), this.y + ly);
@@ -42,30 +58,32 @@ const BOX = new THREE.BoxGeometry(1, 1, 1);
 
 export class World {
   constructor(scene, renderer, seed, quality) {
-    this.scene = scene; this.seed = seed; this.quality = quality;
+    this.scene = scene; this.seed = seed; this.quality = quality; this.renderer = renderer;
     this.rng = new RNG(seed);
     this.noise = makeNoise2D(seed); this.noise2 = makeNoise2D(seed + 71); this.noise3 = makeNoise2D(seed + 913);
     this.flats = []; this.cells = new Map(); this.stamp = 0; this._q = []; this._q2 = [];
     this.floors = []; this.buildings = []; this.interactables = []; this.spawns = []; this.roads = [];
     this.excl = []; this.pois = {}; this.npcSpots = []; this.waypoints = []; this.animated = []; this.mapLabels = [];
     this.wind = { value: 0 };
+    this.props = new PropField();
     this.tex = makeTextures(Math.min(8, renderer.capabilities.getMaxAnisotropy()));
     const steps = [['materials', () => this.makeMaterials()], ['layout', () => this.planLayout()], ['plan village', () => planVillage(this)],
       ['terrain', () => this.buildTerrain()], ['roads', () => this.buildRoads()], ['village', () => buildVillage(this)], ['wilds', () => buildWilds(this)],
-      ['vegetation', () => this.scatterVegetation()], ['herbs', () => herbsAndChests(this)], ['sky', () => this.buildSky()], ['lights', () => this.buildLights()]];
+      ['vegetation', () => this.scatterVegetation()], ['herbs', () => herbsAndChests(this)], ['sky', () => this.buildSky()], ['lights', () => this.buildLights()], ['props', () => { this.propMeshes = this.props.build(this.scene); }]];
     for (const [name, fn] of steps) { const t0 = performance.now(); fn(); console.log(`[gen] ${name}: ${Math.round(performance.now() - t0)}ms`); }
   }
 
   // ---------- materials ----------
   makeMaterials() {
-    const T = this.tex;
+    const T = this.tex, P = Assets.tex;
     const std = (o, uv, ud = {}) => { const m = new THREE.MeshStandardMaterial({ roughness: 0.9, metalness: 0, vertexColors: true, ...o }); m.userData = { uvScale: uv, ...ud }; return m; };
+    const pbr = (set, uv, o = {}, ud = {}) => std({ map: set.map, normalMap: set.normalMap, roughnessMap: set.roughnessMap, normalScale: new THREE.Vector2(0.8, 0.8), roughness: 1, ...o }, uv, ud);
     const basic = (o) => { const m = new THREE.MeshBasicMaterial(o); m.userData = { castShadow: false, receiveShadow: false }; return m; };
     this.M = {
-      plaster: std({ map: T.plaster }, 2.5), stone: std({ map: T.stone }, 2), log: std({ map: T.log }, 1.6),
-      wood: std({ map: T.planks }, 1.6), thatch: std({ map: T.thatch }, 2), shingle: std({ map: T.shingle }, 1.6),
-      cobble: std({ map: T.cobble }, 2.4, { castShadow: false }), color: std({}, null), bark: std({ map: T.bark }, 1),
-      road: std({ map: T.ground, polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -4 }, 1.4, { castShadow: false }),
+      plaster: pbr(P.plaster, 2.2), stone: pbr(P.stone, 2.4), log: pbr(P.planks, 2.2),
+      wood: pbr(P.floor, 2.0), beam: pbr(P.beam, 1.4), thatch: pbr(P.thatch, 2.6), shingle: pbr(P.tiles, 2.2),
+      cobble: pbr(P.cobble, 3.0, {}, { castShadow: false }), color: std({}, null), bark: std({ map: T.bark }, 1),
+      road: pbr(P.dirt, 3.2, { polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -4 }, { castShadow: false }),
       metal: std({ metalness: 0.6, roughness: 0.45 }, null),
       fire: basic({ vertexColors: true }),
       glow: basic({ vertexColors: true }),
@@ -224,7 +242,8 @@ export class World {
     const g = new THREE.PlaneGeometry(S, S, N, N); g.rotateX(-Math.PI / 2);
     const pos = g.attributes.position, uv = g.attributes.uv;
     const col = new Float32Array(pos.count * 3);
-    const c = new THREE.Color();
+    const splat = new Float32Array(pos.count * 4);
+    const c = new THREE.Color(), white = new THREE.Color(1, 1, 1);
     const cA = new THREE.Color('#58872f'), cB = new THREE.Color('#7fa845'), cDry = new THREE.Color('#a09f55'), cDirt = new THREE.Color('#86704f'),
       cRock = new THREE.Color('#9a9488'), cDark = new THREE.Color('#40652a'), cSand = new THREE.Color('#b3a078'), cGrave = new THREE.Color('#5b6848'), cCamp = new THREE.Color('#7a6a4a');
     const W = this.water, P = this.pois;
@@ -243,22 +262,60 @@ export class World {
       c.lerp(cSand, 1 - smoothstep(W.r * 0.8, W.r + 3, Math.hypot(x - W.x, z - W.z)));
       c.lerp(cGrave, (1 - smoothstep(14, 24, Math.hypot(x - P.grave.x, z - P.grave.z))) * 0.7);
       c.lerp(cCamp, (1 - smoothstep(8, 20, Math.hypot(x - P.camp.x, z - P.camp.z))) * 0.75);
+      // texture weights: grass, dirt, rock, forest floor
+      let wr = Math.max(smoothstep(0.9, 1.8, sl), smoothstep(13, 24, h));
+      let wd = Math.max(1 - smoothstep(-0.8, 1.4, this.roadEdge(x, z)), 1 - smoothstep(W.r * 0.8, W.r + 3, Math.hypot(x - W.x, z - W.z)),
+        (1 - smoothstep(8, 18, Math.hypot(x - P.camp.x, z - P.camp.z))) * 0.8, smoothstep(0.35, 0.6, this.noise3(x * 0.05 + 7, z * 0.05)) * 0.35);
+      let wf = smoothstep(0.0, -0.35, n2) * smoothstep(64, 90, r) + (1 - smoothstep(14, 24, Math.hypot(x - P.grave.x, z - P.grave.z))) * 0.6;
+      wd = Math.min(1, wd); wr = Math.min(1, wr); wf = Math.min(1, wf) * (1 - wd) * (1 - wr);
+      const wg = Math.max(0, 1 - wd - wr - wf);
+      const sum = wg + wd + wr + wf || 1;
+      splat[i * 4] = wg / sum; splat[i * 4 + 1] = wd / sum; splat[i * 4 + 2] = wr / sum; splat[i * 4 + 3] = wf / sum;
+      // vertex colour = the stylized grass colour (the grass photo only adds detail)
       col[i * 3] = c.r; col[i * 3 + 1] = c.g; col[i * 3 + 2] = c.b;
       uv.setXY(i, x / 3, z / 3);
     }
     g.setAttribute('color', new THREE.BufferAttribute(col, 3));
+    g.setAttribute('splat', new THREE.BufferAttribute(splat, 4));
     g.computeVertexNormals();
-    const mesh = new THREE.Mesh(g, new THREE.MeshLambertMaterial({ map: this.tex.ground, vertexColors: true }));
+    const mesh = new THREE.Mesh(g, this.terrainMaterial());
     mesh.receiveShadow = true;
     this.scene.add(mesh);
     this.terrain = mesh;
 
     // water
     const wg = new THREE.CircleGeometry(W.r * 1.02, 48); wg.rotateX(-Math.PI / 2);
-    this.waterMat = new THREE.MeshStandardMaterial({ color: '#2f6f8f', roughness: 0.08, metalness: 0.2, transparent: true, opacity: 0.82 });
+    this.waterNormal = waterNormalTexture(); this.waterNormal.repeat.set(4, 4);
+    this.waterMat = new THREE.MeshStandardMaterial({ color: '#1f4a5a', roughness: 0.05, metalness: 0.1, transparent: true, opacity: 0.86, normalMap: this.waterNormal, normalScale: new THREE.Vector2(0.35, 0.35), envMapIntensity: 1.4 });
     const wm = new THREE.Mesh(wg, this.waterMat); wm.position.set(W.x, W.y, W.z); wm.receiveShadow = true;
     this.scene.add(wm);
     this.addCircle(W.x, W.z, W.r * 0.62);
+  }
+
+  // PBR terrain: blends grass / dirt / rock / forest-floor photo textures by per-vertex weights,
+  // sampling each at two scales to hide tiling.
+  terrainMaterial() {
+    const P = Assets.tex;
+    const m = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.95, metalness: 0, normalMap: P.grass.normalMap, normalScale: new THREE.Vector2(0.6, 0.6) });
+    m.onBeforeCompile = (sh) => {
+      Object.assign(sh.uniforms, { tGrass: { value: P.grass.map }, tDirt: { value: P.dirt.map }, tRock: { value: P.rock.map }, tForest: { value: P.forest.map },
+        nDirt: { value: P.dirt.normalMap }, nRock: { value: P.rock.normalMap } });
+      sh.vertexShader = 'attribute vec4 splat; varying vec4 vSplat; varying vec2 vWuv;\n' + sh.vertexShader.replace('#include <uv_vertex>', '#include <uv_vertex>\n vSplat = splat; vWuv = position.xz / 3.0;');
+      sh.fragmentShader = 'uniform sampler2D tGrass, tDirt, tRock, tForest, nDirt, nRock; varying vec4 vSplat; varying vec2 vWuv;\n' + sh.fragmentShader
+        .replace('#include <map_fragment>', `
+          vec3 gt = mix(texture2D(tGrass, vWuv).rgb, texture2D(tGrass, vWuv * 0.21 + 0.37).rgb, 0.45);
+          vec3 cg = vColor.rgb * (0.35 + dot(gt, vec3(0.3, 0.59, 0.11)) * 2.6);
+          vec3 cd = mix(texture2D(tDirt, vWuv * 0.8).rgb, texture2D(tDirt, vWuv * 0.19).rgb, 0.35);
+          vec3 cr = mix(texture2D(tRock, vWuv * 0.5).rgb, texture2D(tRock, vWuv * 0.13).rgb, 0.4);
+          vec3 cf = texture2D(tForest, vWuv * 0.9).rgb;
+          diffuseColor.rgb *= cg * vSplat.x + cd * vSplat.y + cr * vSplat.z + cf * vSplat.w;`)
+        .replace('#include <color_fragment>', '')
+        .replace('#include <normal_fragment_maps>', `
+          vec3 mapN = texture2D(normalMap, vWuv).xyz * vSplat.x + texture2D(nDirt, vWuv * 0.8).xyz * (vSplat.y + vSplat.w) + texture2D(nRock, vWuv * 0.5).xyz * vSplat.z;
+          mapN = mapN * 2.0 - 1.0; mapN.xy *= normalScale;
+          normal = normalize(tbn * mapN);`);
+    };
+    return m;
   }
 
   buildRoads() {
@@ -287,13 +344,13 @@ export class World {
       g.computeVertexNormals();
       // ensure up-facing
       const nrm = g.attributes.normal; if (nrm.getY(0) < 0) { g.setIndex(idx.map((v, k) => idx[k - (k % 3) + [0, 2, 1][k % 3]])); g.computeVertexNormals(); }
-      batch.add('road', g, new THREE.Matrix4(), r.main ? '#a88c64' : '#9c8260');
+      batch.add('road', g, new THREE.Matrix4(), r.main ? '#f0e4d0' : '#e4d6c0');
     }
     this.scene.add(batch.build(this.M));
   }
 
   // ---------- vegetation ----------
-  chunked(geo, mat, items, { shadow = true, colors = null } = {}) {
+  chunked(geo, mat, items, { shadow = true, receive = true } = {}) {
     // items: [{m: Matrix4, c: Color?}], split into spatial chunks for culling
     const chunks = new Map();
     const v = new THREE.Vector3();
@@ -305,7 +362,7 @@ export class World {
     for (const list of chunks.values()) {
       const im = new THREE.InstancedMesh(geo, mat, list.length);
       list.forEach((it, i) => { im.setMatrixAt(i, it.m); if (it.c) im.setColorAt(i, it.c); });
-      im.castShadow = shadow; im.receiveShadow = true;
+      im.castShadow = shadow; im.receiveShadow = receive;
       im.computeBoundingSphere();
       this.scene.add(im);
     }
@@ -314,77 +371,68 @@ export class World {
   scatterVegetation() {
     const R = new RNG(this.seed + 5);
     const q = this.quality;
-    const treeMat = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.95, flatShading: true });
-    const pine = compoundGeometry([
-      [cylGeo(0.16, 0.28, 2.4, 6), mtx(0, 1.2, 0), '#5a3d25'],
-      [new THREE.ConeGeometry(1.7, 2.6, 7), mtx(0, 2.7, 0), '#2d5829'], [new THREE.ConeGeometry(1.3, 2.3, 7), mtx(0, 3.9, 0, 0.4), '#33632d'],
-      [new THREE.ConeGeometry(0.9, 1.9, 7), mtx(0, 5.0, 0, 0.8), '#3b7033']]);
-    const oak = compoundGeometry([
-      [cylGeo(0.2, 0.34, 2.8, 7), mtx(0, 1.4, 0), '#5d4128'],
-      [new THREE.IcosahedronGeometry(1.8, 1), mtx(0, 3.7, 0, 0, 1, 0.85, 1), '#4a7a30'], [new THREE.IcosahedronGeometry(1.3, 1), mtx(1.0, 3.2, 0.4), '#55873a'],
-      [new THREE.IcosahedronGeometry(1.25, 1), mtx(-0.9, 3.4, -0.5), '#4f8034'], [new THREE.IcosahedronGeometry(1.1, 1), mtx(0.1, 4.6, 0.2), '#5c923d']]);
-    const birch = compoundGeometry([
-      [cylGeo(0.13, 0.2, 3.6, 6), mtx(0, 1.8, 0), '#ddd8cc'],
-      [new THREE.IcosahedronGeometry(1.2, 1), mtx(0, 4.0, 0, 0, 0.9, 1.3, 0.9), '#7fae4a'], [new THREE.IcosahedronGeometry(0.9, 1), mtx(0.5, 3.3, 0.3), '#8ab852']]);
-    const dead = compoundGeometry([
-      [cylGeo(0.12, 0.28, 3.4, 6), mtx(0, 1.7, 0), '#4d4036'],
-      [cylGeo(0.05, 0.1, 1.6, 5), mtx(0.5, 2.9, 0, 0, 1, 1, 1, 0, -0.9), '#4d4036'],
-      [cylGeo(0.05, 0.09, 1.3, 5), mtx(-0.4, 2.4, 0.2, 0, 1, 1, 1, 0.3, 0.9), '#4d4036'],
-      [cylGeo(0.04, 0.07, 1.0, 5), mtx(0.1, 3.5, -0.3, 0, 1, 1, 1, -0.7, 0.2), '#4d4036']]);
-    const lists = { pine: [], oak: [], birch: [], dead: [] };
-    const tint = new THREE.Color();
-    const addTree = (type, x, z, s) => {
-      const y = this.heightAt(x, z) - 0.1;
-      lists[type].push({ m: mtx(x, y, z, R.range(0, 6.28), s, s * R.range(0.9, 1.15), s), c: tint.setHSL(R.range(0.2, 0.3), R.range(0.3, 0.6), R.range(0.8, 1.05)).clone() });
-      this.addCircle(x, z, (type === 'birch' ? 0.22 : 0.32) * s, -1e9, 1e9);
+    const TREES = {
+      common: ['CommonTree_1', 'CommonTree_2', 'CommonTree_5', 'CommonTree_3'], pine: ['PineTree_1', 'PineTree_2', 'PineTree_3', 'PineTree_4'],
+      birch: ['BirchTree_1', 'BirchTree_2', 'BirchTree_3'], willow: ['Willow_1', 'Willow_2'], dead: ['CommonTree_Dead_1', 'CommonTree_Dead_2'],
     };
-    const step = q === 'low' ? 5.2 : 4.4;
+    const addTree = (type, x, z, s) => {
+      const y = this.heightAt(x, z) - 0.15;
+      const tint = new THREE.Color().setHSL(R.range(0.2, 0.32), R.range(0.0, 0.25), R.range(0.85, 1.05));
+      this.props.add('nature', R.pick(TREES[type]), mtx(x, y, z, R.range(0, 6.28), s, s * R.range(0.9, 1.15), s), tint);
+      this.addCircle(x, z, 0.14 * s, -1e9, 1e9);
+    };
+    // density scales with quality (these trees are detailed models)
+    const step = q === 'low' ? 8 : q === 'med' ? 6.8 : 5.8;
     for (let x = -192; x < 192; x += step) for (let z = -192; z < 192; z += step) {
-      const px = x + R.range(-1.8, 1.8), pz = z + R.range(-1.8, 1.8);
+      const px = x + R.range(-2.2, 2.2), pz = z + R.range(-2.2, 2.2);
       const r = Math.hypot(px, pz);
       if (r > 192) continue;
       const dens = this.noise3(px * 0.013 + 3, pz * 0.013);
       let p;
-      if (r < this.fenceR - 3) p = r > 16 ? 0.035 : 0;
-      else if (r < 72) p = 0.12;
-      else p = 0.2 + 0.6 * smoothstep(-0.25, 0.35, dens);
+      if (r < this.fenceR - 3) p = r > 16 ? 0.05 : 0;
+      else if (r < 72) p = 0.14;
+      else p = 0.22 + 0.62 * smoothstep(-0.25, 0.35, dens);
       if (r > 178) p *= 0.5;
-      if (!R.chance(p)) continue;
-      if (!this.isClear(px, pz, 3)) continue;
-      const nearGrave = Math.hypot(px - this.pois.grave.x, pz - this.pois.grave.z) < 40;
-      const t = nearGrave && R.chance(0.6) ? 'dead' : (r > 150 || this.noise2(px * 0.02, pz * 0.02) > 0.15) ? 'pine' : R.chance(0.2) ? 'birch' : 'oak';
-      addTree(t, px, pz, R.range(0.8, 1.35));
+      if (!R.chance(p) || !this.isClear(px, pz, 3)) continue;
+      const nearGrave = Math.hypot(px - this.pois.grave.x, pz - this.pois.grave.z) < 42;
+      const nearWater = Math.hypot(px - this.water.x, pz - this.water.z) < 30;
+      const t = nearGrave && R.chance(0.65) ? 'dead' : nearWater && R.chance(0.5) ? 'willow' : (r > 150 || this.noise2(px * 0.02, pz * 0.02) > 0.15) ? 'pine' : R.chance(0.22) ? 'birch' : 'common';
+      addTree(t, px, pz, R.range(2.3, 3.3));
     }
-    for (const [k, geo] of Object.entries({ pine, oak, birch, dead })) if (lists[k].length) this.chunked(geo, treeMat, lists[k]);
-
     // rocks
-    const rockGeo = new THREE.DodecahedronGeometry(1, 0);
-    const rockMat = new THREE.MeshStandardMaterial({ color: '#b0aaa0', roughness: 0.95, flatShading: true });
-    const rocks = [];
-    for (let i = 0; i < 380; i++) {
+    this.rockSpots = [];
+    for (let i = 0; i < 300; i++) {
       const a = R.range(0, 6.28), r = Math.sqrt(R.next()) * 120 + 68;
       const x = Math.sin(a) * r, z = Math.cos(a) * r;
       if (r > 190 || !this.isClear(x, z, 1.5)) continue;
-      const s = r > 160 ? R.range(1, 3) : R.chance(0.15) ? R.range(0.9, 1.6) : R.range(0.25, 0.7);
+      const big = r > 160 || R.chance(0.18);
+      const s = big ? R.range(2.2, 4.5) : R.range(0.7, 1.6);
       const y = this.heightAt(x, z);
-      rocks.push({ m: mtx(x, y - s * 0.25, z, R.range(0, 6), s * R.range(0.9, 1.4), s * R.range(0.5, 0.8), s * R.range(0.9, 1.3), R.range(-0.3, 0.3)), c: new THREE.Color().setHSL(0.08, 0.06, R.range(0.35, 0.55)) });
-      if (s > 0.55) this.addCircle(x, z, s * 0.95, -1e9, y + s * 0.5);
+      this.props.add('nature', R.pick(['Rock_Moss_1', 'Rock_Moss_2', 'Rock_Moss_3', 'Rock_Moss_4', 'Rock_Moss_5', 'Rock_2', 'Rock_3']), mtx(x, y - 0.1 * s, z, R.range(0, 6), s, s * R.range(0.8, 1.2), s));
+      if (s > 1.2) this.addCircle(x, z, s * 0.36, -1e9, y + s * 0.6);
+      this.rockSpots.push(new THREE.Vector3(x, y, z));
     }
-    this.chunked(rockGeo, rockMat, rocks);
-    this.rockSpots = rocks.map((r) => new THREE.Vector3().setFromMatrixPosition(r.m));
-
-    // bushes
-    const bushGeo = new THREE.IcosahedronGeometry(0.7, 0);
-    const bushMat = new THREE.MeshStandardMaterial({ color: '#ffffff', roughness: 1, flatShading: true });
-    const bushes = [];
-    for (let i = 0; i < (q === 'low' ? 300 : 650); i++) {
-      const a = R.range(0, 6.28), r = R.range(15, 180);
+    // bushes, plants, stumps, logs, flowers
+    const small = [['Bush_1', 1.1, 1.8], ['Bush_2', 1.1, 1.8], ['BushBerries_1', 1, 1.5], ['Plant_1', 1, 1.6], ['Plant_3', 0.9, 1.5], ['Plant_2', 0.7, 1.1]];
+    for (let i = 0; i < (q === 'low' ? 350 : 800); i++) {
+      const a = R.range(0, 6.28), r = R.range(15, 182);
       const x = Math.sin(a) * r, z = Math.cos(a) * r;
       if (!this.isClear(x, z, 1)) continue;
-      const s = R.range(0.6, 1.4);
-      bushes.push({ m: mtx(x, this.heightAt(x, z) + 0.2 * s, z, R.range(0, 6), s, s * 0.75, s), c: new THREE.Color().setHSL(R.range(0.22, 0.3), 0.55, R.range(0.1, 0.17)) });
+      const [n, s0, s1] = R.pick(small);
+      this.props.add('nature', n, mtx(x, this.heightAt(x, z) - 0.05, z, R.range(0, 6.28), R.range(s0, s1)));
     }
-    this.chunked(bushGeo, bushMat, bushes);
+    for (let i = 0; i < 70; i++) {
+      const a = R.range(0, 6.28), r = R.range(70, 180); const x = Math.sin(a) * r, z = Math.cos(a) * r;
+      if (!this.isClear(x, z, 2)) continue;
+      const log = R.chance(0.5); const s = R.range(1.4, 2.0); const y = this.heightAt(x, z);
+      this.props.add('nature', log ? 'WoodLog_Moss' : 'TreeStump_Moss', mtx(x, y - 0.05, z, R.range(0, 6.28), s));
+      this.addCircle(x, z, log ? 0.8 : 0.6, -1e9, y + 0.9);
+    }
+    for (let i = 0; i < (q === 'low' ? 250 : 600); i++) {
+      const a = R.range(0, 6.28), r = R.range(14, 110); const x = Math.sin(a) * r, z = Math.cos(a) * r;
+      if (!this.isClear(x, z, 0.5) || this.noise3(x * 0.05, z * 0.05) < 0.05) continue;
+      this.props.add('nature', 'Flowers', mtx(x, this.heightAt(x, z) - 0.03, z, R.range(0, 6.28), R.range(0.7, 1.1)));
+    }
 
     // grass (wind-animated instanced blades)
     const blades = [];
@@ -393,14 +441,15 @@ export class World {
       const cx = Math.cos(a) * w, cz = Math.sin(a) * w, lean = R.range(-0.08, 0.08);
       blades.push([ox - cx, 0, oz - cz, ox + cx, 0, oz + cz, ox + lean, h, oz + lean]);
     }
-    const gp = new Float32Array(blades.flat()); const gn = new Float32Array(gp.length); const gc = new Float32Array(gp.length);
+    const gp = new Float32Array(blades.flatMap((b) => [...b, b[3], b[4], b[5], b[0], b[1], b[2], b[6], b[7], b[8]])); // both windings, so both sides are lit from above
+    const gn = new Float32Array(gp.length); const gc = new Float32Array(gp.length);
     for (let i = 0; i < gp.length / 3; i++) {
       gn[i * 3 + 1] = 1; const t = gp[i * 3 + 1] > 0.01 ? 1 : 0;
-      gc[i * 3] = t ? 0.75 : 0.3; gc[i * 3 + 1] = t ? 0.85 : 0.45; gc[i * 3 + 2] = t ? 0.4 : 0.18;
+      gc[i * 3] = t ? 0.6 : 0.26; gc[i * 3 + 1] = t ? 0.82 : 0.44; gc[i * 3 + 2] = t ? 0.28 : 0.12;
     }
     const grassGeo = new THREE.BufferGeometry();
     grassGeo.setAttribute('position', new THREE.BufferAttribute(gp, 3)); grassGeo.setAttribute('normal', new THREE.BufferAttribute(gn, 3)); grassGeo.setAttribute('color', new THREE.BufferAttribute(gc, 3));
-    const grassMat = new THREE.MeshLambertMaterial({ vertexColors: true, side: THREE.DoubleSide });
+    const grassMat = new THREE.MeshLambertMaterial({ vertexColors: true, emissive: '#101a06' });
     grassMat.onBeforeCompile = (sh) => {
       sh.uniforms.uTime = this.wind;
       sh.vertexShader = 'uniform float uTime;\n' + sh.vertexShader.replace('#include <begin_vertex>', `#include <begin_vertex>
@@ -421,18 +470,8 @@ export class World {
       const s = R.range(0.7, 1.35);
       grass.push({ m: mtx(x, this.heightAt(x, z) - 0.02, z, R.range(0, 6.28), s, s * R.range(0.8, 1.3), s), c: new THREE.Color().setHSL(R.range(0.2, 0.28), R.range(0.4, 0.6), R.range(0.7, 1.0)) });
     }
-    this.chunked(grassGeo, grassMat, grass, { shadow: false });
+    this.chunked(grassGeo, grassMat, grass, { shadow: false, receive: false });
 
-    // flowers
-    const flowerGeo = compoundGeometry([[cylGeo(0.01, 0.01, 0.3, 3), mtx(0, 0.15, 0), '#3a6a2a'], [new THREE.OctahedronGeometry(0.07, 0), mtx(0, 0.32, 0), '#ffffff']]);
-    const flowerMat = new THREE.MeshLambertMaterial({ vertexColors: true });
-    const flowers = []; const fcols = ['#ffd84a', '#ff6a8a', '#ffffff', '#b58aff', '#ff9a3a', '#6ab0ff'];
-    for (let i = 0; i < (q === 'low' ? 500 : 1400); i++) {
-      const a = R.range(0, 6.28), r = R.range(14, 110); const x = Math.sin(a) * r, z = Math.cos(a) * r;
-      if (!this.isClear(x, z, 0.5) || this.noise3(x * 0.05, z * 0.05) < 0.05) continue;
-      flowers.push({ m: mtx(x, this.heightAt(x, z), z, R.range(0, 6), 1, R.range(0.7, 1.3), 1), c: new THREE.Color(R.pick(fcols)) });
-    }
-    this.chunked(flowerGeo, flowerMat, flowers, { shadow: false });
   }
 
   // ---------- sky ----------
@@ -465,6 +504,11 @@ export class World {
     this.sky = new THREE.Mesh(new THREE.SphereGeometry(500, 32, 16), mat);
     this.sky.renderOrder = -1; this.sky.frustumCulled = false;
     this.scene.add(this.sky);
+    // image-based lighting: the sky is re-baked into an environment map as the day progresses
+    this.envScene = new THREE.Scene();
+    this.envScene.add(new THREE.Mesh(new THREE.SphereGeometry(50, 32, 16), mat));
+    this.pmrem = new THREE.PMREMGenerator(this.renderer);
+    this.envT = 0;
     this.scene.fog = new THREE.Fog('#bcd8ee', 50, 240);
   }
 
@@ -515,7 +559,7 @@ export class World {
     this.sun.target.position.set(playerPos.x, playerPos.y, playerPos.z);
     this.sun.intensity = isDay ? 2.8 * smoothstep(-0.05, 0.25, sd.y) : 0.35 * smoothstep(-0.05, -0.3, sd.y);
     this.sun.color.set(isDay ? '#fff0d8' : '#9fb4ff').lerp(_c.set('#ffa060'), isDay ? dusk : 0);
-    this.hemi.intensity = 0.28 + 0.85 * day;
+    this.hemi.intensity = 0.18 + 0.55 * day;
     this.hemi.color.set('#6a80b0').lerp(_c.set('#cfe6ff'), day);
     this.hemi.groundColor.set('#1a2018').lerp(_c.set('#4a5a30'), day);
     this.night = 1 - day;
@@ -530,6 +574,40 @@ export class World {
     this.lantern.intensity = b ? 0 : 14 * smoothstep(0.4, 0.8, this.night);
     this.campLight.intensity = 30 + Math.sin(this.wind.value * 11) * 5 + Math.sin(this.wind.value * 7.3) * 4;
     for (const o of this.animated) o(dt, this.wind.value);
+    // level of detail for trees & plants
+    this.lodT = (this.lodT || 0) - dt;
+    if (this.lodT <= 0) {
+      this.lodT = 0.25;
+      const q = this.quality;
+      this.props.updateLod(playerPos.x, playerPos.z, q === 'high' ? 55 : q === 'med' ? 40 : 28, q === 'high' ? 90 : q === 'med' ? 65 : 45);
+    }
+    // refresh environment lighting every few seconds
+    this.envT -= dt;
+    if (this.envT <= 0) {
+      this.envT = 4;
+      const old = this.envRT;
+      this.envRT = this.pmrem.fromScene(this.envScene, 0, 0.1, 200);
+      this.scene.environment = this.envRT.texture;
+      old?.dispose();
+    }
+    this.scene.environmentIntensity = 0.25 + 0.55 * day;
+    if (this.waterNormal) { this.waterNormal.offset.x += dt * 0.02; this.waterNormal.offset.y += dt * 0.013; }
   }
 }
 const _c = new THREE.Color(), _v = new THREE.Vector3();
+
+// Procedural ripple normal map for the pond
+function waterNormalTexture() {
+  const S = 128, c = document.createElement('canvas'); c.width = c.height = S;
+  const x = c.getContext('2d'); const img = x.createImageData(S, S);
+  const k2 = Math.PI * 2 / S;
+  const h = (i, j) => Math.sin(i * k2 * 3) * 0.5 + Math.sin((j * 2 + i) * k2 * 2) * 0.5 + Math.sin((i + j) * k2 * 5) * 0.3 + Math.sin((i - j) * k2 * 4) * 0.4;
+  const v = new THREE.Vector3();
+  for (let j = 0; j < S; j++) for (let i = 0; i < S; i++) {
+    v.set(-(h(i + 1, j) - h(i - 1, j)), 1.2, -(h(i, j + 1) - h(i, j - 1))).normalize();
+    const k = (j * S + i) * 4;
+    img.data[k] = (v.x * 0.5 + 0.5) * 255; img.data[k + 1] = (v.z * 0.5 + 0.5) * 255; img.data[k + 2] = v.y * 255; img.data[k + 3] = 255;
+  }
+  x.putImageData(img, 0, 0);
+  const t = new THREE.CanvasTexture(c); t.wrapS = t.wrapT = THREE.RepeatWrapping; return t;
+}

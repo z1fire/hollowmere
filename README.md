@@ -19,9 +19,18 @@ On Android, open the APK and allow "install unknown apps" for your browser when 
 - **Combat** — pitchforks, swords, axes, bows, thorn bolts, lightning, fireballs and healing magic; wolves, goblins, skeletons, and the Goblin Warchief boss.
 - **Quests, shops, loot chests, herbs, a day/night cycle**, a minimap and a full map, autosave.
 - **Touch controls** built for phones and tablets (plus keyboard & mouse on desktop).
+- **High-quality stylized 3D** — fully animated characters and monsters, hand-crafted models for trees, props, furniture and crops, photo-scanned PBR materials, image-based sky lighting, bloom and colour grading, with automatic level-of-detail so it stays smooth on phones (Low / Medium / High graphics settings).
 
 ## 🗺️ Roadmap
 The current release covers the first region: Hollowmere village and its surrounding wilds. The **collapsed mine** and the **sealed crypt** are the entrances to future regions.
+
+## 🎨 Art credits
+All 3D models and textures are CC0 (public domain) — thank you to their creators:
+- **[KayKit](https://kaylousberg.com)** by Kay Lousberg — Adventurers & Skeletons character packs, Dungeon Remastered, Furniture Bits, Halloween Bits
+- **[Quaternius](https://quaternius.com)** — Ultimate Nature, Crops, Medieval Village, Modular Medieval Buildings, Survival, RPG Items, Animals, Ultimate Monsters
+- **[Poly Haven](https://polyhaven.com)** — PBR textures
+
+See `web/assets/CREDITS.txt`. The optimized assets are produced by `tools/build-assets.mjs` (`cd tools && npm install && npm run assets`).
 
 ## 🛠️ Project layout
 
@@ -33,6 +42,10 @@ web/                 The game (plain ES modules + three.js, no build step)
   js/player.js       first-person controller, skills, view model
   js/entities.js     NPC + enemy AI
   js/data.js         items, skills, classes, quests, enemies, shops
+  js/assets.js       model/texture loading, batched & LOD'd prop rendering
+  js/characters.js   animated characters (KayKit / Quaternius rigs)
+  assets/            optimized models (.glb, meshopt-compressed) and textures
+tools/               asset pipeline (downloads CC0 sources, compresses, generates LODs)
 android/             Minimal native wrapper (WebView serving the bundled game offline)
 .github/workflows/   release.yml → signed APK + GitHub Release, pages.yml → web version
 ```

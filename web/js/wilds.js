@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { RNG, mtx, Batcher, cylGeo } from './util.js';
 import { Builder, polar } from './world.js';
+import { Assets } from './assets.js';
 
 const DARK = '#4a3220';
 
@@ -22,10 +23,9 @@ function goblinCamp(W, R, batch) {
   const B = Builder.at(W, batch, c.x, y, c.z, face);
   W.mapLabels.push({ x: c.x, z: c.z, text: 'Goblin Camp', danger: true });
   // campfire
-  for (let i = 0; i < 9; i++) { const a = i / 9 * Math.PI * 2; B.geo('color', new THREE.DodecahedronGeometry(0.22, 0), Math.sin(a) * 0.8, 0.12, Math.cos(a) * 0.8, a, '#6a6660'); }
-  for (let i = 0; i < 3; i++) B.add('wood', cylGeo(0.1, 0.1, 1.3, 6), mtx(0, 0.2, 0, i * 1.05, 1, 1, 1, Math.PI / 2 - 0.3), DARK);
-  B.geo('fire', new THREE.ConeGeometry(0.45, 1.0, 6), 0, 0.6, 0, 0, '#ff7a1a');
-  B.geo('fire', new THREE.ConeGeometry(0.25, 0.7, 5), 0.05, 0.6, 0.05, 1, '#ffd35a');
+  B.prop('village', 'Bonfire_Fire', 0, 0, 0, 0, 0.75, { collide: false });
+  B.geo('fire', new THREE.ConeGeometry(0.35, 0.9, 6), 0, 0.55, 0, 0, '#ff7a1a');
+  B.geo('fire', new THREE.ConeGeometry(0.2, 0.6, 5), 0.05, 0.5, 0.05, 1, '#ffd35a');
   W.addCircle(c.x, c.z, 0.9, y - 1, y + 1);
   // tents in ring (opening to the front)
   const tents = [];
@@ -33,10 +33,8 @@ function goblinCamp(W, R, batch) {
     const a = Math.PI * 0.35 + i / 5 * Math.PI * 1.3;
     const r = i === 3 ? 10.5 : R.range(7.5, 9.5), s = i === 3 ? 1.6 : R.range(0.9, 1.2);
     const x = Math.sin(a) * r, z = Math.cos(a) * r;
-    B.geo('color', new THREE.ConeGeometry(1.8 * s, 2.6 * s, 6), x, 1.3 * s, z, R.range(0, 6), R.pick(['#8a6a4a', '#7a5a3a', '#6a5a3a', '#9a7a5a']));
-    B.geo('color', new THREE.ConeGeometry(0.2, 0.9, 4), x, 2.8 * s, z, 0, DARK);
-    B.geo('color', new THREE.PlaneGeometry(0.9 * s, 1.3 * s), x - Math.sin(a) * 1.55 * s, 0.65 * s, z - Math.cos(a) * 1.55 * s, a, '#1a1410');
-    const p = B.P(x, z); W.addCircle(p.x, p.z, 1.5 * s);
+    B.prop('village', 'Tent', x, -0.05, z, a + Math.PI, 0.2 * s, { collide: false, tint: R.pick(['#ffffff', '#e8d8c0', '#d0c0a0']) });
+    const p = B.P(x, z); W.addCircle(p.x, p.z, 1.6 * s);
     tents.push({ x, z, s, a });
   }
   // palisade arc behind the camp
@@ -44,21 +42,20 @@ function goblinCamp(W, R, batch) {
     const r = 15;
     const x = Math.sin(a) * r, z = Math.cos(a) * r;
     const h = R.range(2.0, 2.8);
-    B.cyl('wood', x, h / 2, z, 0.2, h, '#6a4a2a', false, 6);
-    B.geo('wood', new THREE.ConeGeometry(0.2, 0.5, 6), x, h + 0.25, z, 0, '#6a4a2a');
+    B.cyl('log', x, h / 2, z, 0.2, h, '#d8c0a0', false, 6);
+    B.geo('log', new THREE.ConeGeometry(0.2, 0.5, 6), x, h + 0.25, z, 0, '#d8c0a0');
     const p = B.P(x, z); W.addCircle(p.x, p.z, 0.32);
   }
   // totems & crates
   for (const s of [-1, 1]) {
     const x = s * 3.2, z = 13;
-    B.cyl('wood', x, 1.4, z, 0.22, 2.8, '#5a3a1a', true, 6);
-    B.geo('color', new THREE.SphereGeometry(0.28, 8, 6), x, 2.9, z, 0, '#e6e0cc');
-    B.box('color', x - 0.1, 2.92, z + 0.22, 0.08, 0.08, 0.05, '#111', false); B.box('color', x + 0.1, 2.92, z + 0.22, 0.08, 0.08, 0.05, '#111', false);
-    B.box('color', x, 2.2, z, 0.9, 0.1, 0.1, '#c83a3a', false);
+    B.prop('halloween', 'post_skull', x, 0, z, s > 0 ? -Math.PI / 2 : Math.PI / 2, 1.1);
   }
-  for (let i = 0; i < 4; i++) { const a = R.range(0, 6.28), r = R.range(4, 6); B.box('wood', Math.sin(a) * r, 0.35, Math.cos(a) * r, 0.7, 0.7, 0.7, '#8a6a3a', true, R.range(0, 1)); }
-  // bones
-  for (let i = 0; i < 8; i++) { const a = R.range(0, 6.28), r = R.range(2, 7); B.box('color', Math.sin(a) * r, 0.05, Math.cos(a) * r, 0.5, 0.08, 0.08, '#e6e0cc', false, R.range(0, 3)); }
+  for (let i = 0; i < 5; i++) { const a = R.range(0, 6.28), r = R.range(4, 6); B.prop('dungeon', R.pick(['box_small', 'box_large', 'barrel_small', 'crates_stacked']), Math.sin(a) * r, 0, Math.cos(a) * r, R.int(0, 3) * Math.PI / 2, 0.6); }
+  for (let i = 0; i < 10; i++) { const a = R.range(0, 6.28), r = R.range(2, 8); B.prop('halloween', R.pick(['bone_A', 'bone_B', 'skull', 'ribcage']), Math.sin(a) * r, 0.05, Math.cos(a) * r, R.range(0, 6), 0.5, { collide: false }); }
+  B.prop('village', 'Pot', 1.6, 0, -1.2, 0.5, 0.5, { collide: false });
+  B.prop('village', 'WoodLog', -1.8, 0, 0.8, 1.2, 0.45);
+  B.prop('village', 'WoodLog', 0.6, 0, 1.9, 2.6, 0.45);
   // spawns
   const sp = (type, lx, lz) => { const p = B.P(lx, lz); W.spawns.push({ type, x: p.x, z: p.z, leash: 26 }); };
   const big = tents[3];
@@ -75,40 +72,35 @@ function graveyard(W, R, batch) {
   const B = Builder.at(W, batch, c.x, y, c.z, face);
   W.mapLabels.push({ x: c.x, z: c.z, text: 'Old Graveyard', danger: true });
   const hw = 13, hd = 11;
-  // low broken stone wall, gate toward village (+z)
-  const wall = (x0, z0, x1, z1) => {
-    const L = Math.hypot(x1 - x0, z1 - z0), n = Math.ceil(L / 1.2);
+  // wrought-iron fence around the yard, gate facing the village (+z)
+  const fenceRun = (x0, z0, x1, z1) => {
+    const L = Math.hypot(x1 - x0, z1 - z0), n = Math.max(1, Math.round(L / 2.9)), ry = Math.atan2(x1 - x0, z1 - z0) - Math.PI / 2;
     for (let i = 0; i < n; i++) {
-      if (R.chance(0.12)) continue;
-      const t = (i + 0.5) / n; const x = x0 + (x1 - x0) * t, z = z0 + (z1 - z0) * t;
-      const h = R.range(0.7, 1.3);
-      B.box('stone', x, h / 2, z, x0 === x1 ? 0.5 : 1.25, h, x0 === x1 ? 1.25 : 0.5, '#aaa59a', true);
+      const t = (i + 0.5) / n;
+      B.prop('halloween', R.chance(0.2) ? 'fence_broken' : 'fence', x0 + (x1 - x0) * t, 0, z0 + (z1 - z0) * t, ry, 0.72 * (L / n) / 2.9 / 0.72 * 1.0);
+      B.prop('halloween', 'fence_pillar', x0 + (x1 - x0) * i / n, 0, z0 + (z1 - z0) * i / n, 0, 1);
     }
   };
-  wall(-hw, -hd, hw, -hd); wall(-hw, -hd, -hw, hd); wall(hw, -hd, hw, hd); wall(-hw, hd, -2, hd); wall(2, hd, hw, hd);
-  for (const s of [-1, 1]) { B.box('stone', s * 2, 1.1, hd, 0.7, 2.2, 0.7, '#9a958a'); B.geo('color', new THREE.SphereGeometry(0.3, 8, 6), s * 2, 2.4, hd, 0, '#8a8a80'); }
-  // tombstones
+  fenceRun(-hw, -hd, hw, -hd); fenceRun(-hw, -hd, -hw, hd); fenceRun(hw, -hd, hw, hd); fenceRun(-hw, hd, -2.2, hd); fenceRun(2.2, hd, hw, hd);
+  B.prop('halloween', 'arch_gate', 0, 0, hd, 0, 1.05, { collide: false });
+  for (const s2 of [-1, 1]) B.colBox(s2 * 1.9, hd, 0.5, 0.6, 0, 3);
+  // graves
   for (let i = -4; i <= 4; i++) for (let j = -3; j <= 2; j++) {
     if (Math.abs(i) < 1 || R.chance(0.3)) continue;
     const x = i * 2.6 + R.range(-0.3, 0.3), z = j * 2.8 + R.range(-0.3, 0.3);
-    const t = R.int(0, 2);
-    const tilt = R.range(-0.2, 0.2);
-    if (t === 0) { B.add('stone', BOX, mtx(x, 0.45, z, R.range(-0.2, 0.2), 0.6, 0.9, 0.18, tilt), '#b8b4aa'); B.geo('stone', new THREE.CylinderGeometry(0.3, 0.3, 0.18, 10, 1, false, 0, Math.PI), x, 0.9, z, 0, '#b8b4aa', 1, 1, 1, Math.PI / 2, Math.PI / 2); }
-    else if (t === 1) { B.box('stone', x, 0.55, z, 0.12, 1.1, 0.12, '#9a968c', false); B.box('stone', x, 0.8, z, 0.6, 0.12, 0.12, '#9a968c', false); }
-    else B.box('stone', x, 0.2, z, 0.8, 0.4, 0.5, '#a8a49a', false);
-    B.box('color', x, 0.02, z + 0.8, 0.7, 0.05, 1.4, '#5a4a36', false);
-    B.colBox(x, z, 0.6, 0.3, 0, 1);
+    B.prop('halloween', R.pick(['grave_A', 'grave_B', 'grave_A_destroyed', 'gravestone', 'gravemarker_A', 'gravemarker_B', 'gravestone']), x, 0, z, R.range(-0.15, 0.15), R.range(0.8, 1.0));
   }
   // crypt at the back
-  const K = B.sub(0, -hd + 3.5, 0);
-  K.box('stone', 0, 1.6, 0, 5, 3.2, 4, '#9a968c');
-  K.geo('stone', new THREE.ConeGeometry(3.6, 1.6, 4), 0, 4.0, 0, Math.PI / 4, '#8a867c', 1, 1, 0.8);
-  for (const s of [-1, 1]) K.cyl('stone', s * 1.6, 1.5, 2.2, 0.25, 3.0, '#c8c4ba', true, 10);
-  K.box('stone', 0, 3.1, 2.2, 4.2, 0.35, 0.8, '#b8b4aa', false);
-  K.box('color', 0, 1.1, 2.02, 1.4, 2.2, 0.06, '#2a241c', false);
-  K.box('metal', 0, 1.1, 2.06, 0.1, 2.0, 0.04, '#555', false);
-  const kp = K.P(0, 2.8);
-  W.interactables.push({ type: 'crypt', x: kp.x, y: y + 1, z: kp.z, r: 2.4, label: 'Crypt Door' });
+  const K = B.sub(0, -hd + 4, 0);
+  K.prop('halloween', 'crypt', 0, 0, 0, Math.PI, 1.05);
+  const kp = K.P(0, 3.4);
+  W.interactables.push({ type: 'crypt', x: kp.x, y: y + 1, z: kp.z, r: 2.6, label: 'Crypt Door' });
+  // spooky dressing
+  for (const [x, z] of [[-hw + 1.5, hd - 1.5], [hw - 1.5, hd - 1.5], [-hw + 1.5, -hd + 1.5], [hw - 1.5, -hd + 1.5]]) B.prop('halloween', 'post_lantern', x, 0, z, Math.atan2(-x, -z), 1);
+  for (let i = 0; i < 5; i++) B.prop('halloween', R.pick(['tree_dead_large', 'tree_dead_medium', 'tree_dead_small']), R.pick([-1, 1]) * R.range(hw + 2, hw + 6), 0, R.range(-hd, hd), R.range(0, 6), 1.3);
+  for (let i = 0; i < 6; i++) B.prop('halloween', R.pick(['pumpkin_orange', 'pumpkin_orange_jackolantern', 'skull_candle', 'candle_triple', 'bone_A']), R.range(-hw + 1, hw - 1), 0, R.range(-hd + 6, hd - 1), R.range(0, 6), 0.8, { collide: false });
+  B.prop('halloween', 'coffin', 6, 0, -hd + 3, 0.3, 0.8);
+  B.prop('halloween', 'shrine_candles', -6, 0, -hd + 3, 0, 0.9);
   // eerie green glow
   for (let i = 0; i < 6; i++) { const x = R.range(-hw + 2, hw - 2), z = R.range(-hd + 2, hd - 2); B.geo('glow', new THREE.SphereGeometry(0.08, 6, 4), x, 0.6, z, 0, '#66ffcc'); }
   const sp = (type, lx, lz) => { const p = B.P(lx, lz); W.spawns.push({ type, x: p.x, z: p.z, leash: 24 }); };
@@ -122,6 +114,8 @@ function mine(W, R, batch) {
   const face = Math.atan2(-c.x, -c.z);
   const B = Builder.at(W, batch, c.x, y, c.z, face);
   W.mapLabels.push({ x: c.x, z: c.z, text: 'Collapsed Mine' });
+  B.prop('dungeon', 'rubble_large', 0, 0, -1.2, 0, 0.55, { collide: false });
+  for (const s2 of [-1, 1]) B.prop('dungeon', 'torch_lit', s2 * 2.6, 0, -1.4, 0, 1.2, { collide: false });
   // rock mound behind the entrance
   for (let i = 0; i < 14; i++) {
     const a = R.range(-1.4, 1.4), r = R.range(5, 9);
@@ -198,13 +192,10 @@ export function herbsAndChests(W, R = new RNG(W.seed + 43)) {
     if (!W.isClear(x, z, 1)) continue;
     const y = W.heightAt(x, z);
     const g = new THREE.Group(); g.position.set(x, y, z); g.rotation.y = R.range(0, 6);
-    const wood = new THREE.MeshStandardMaterial({ color: '#7a4a24', roughness: 0.8 });
-    const gold = new THREE.MeshStandardMaterial({ color: '#d8a830', roughness: 0.4, metalness: 0.7 });
-    const body = new THREE.Mesh(new THREE.BoxGeometry(0.9, 0.5, 0.6), wood); body.position.y = 0.25; body.castShadow = true; g.add(body);
-    const lidPivot = new THREE.Group(); lidPivot.position.set(0, 0.5, -0.3); g.add(lidPivot);
-    const lid = new THREE.Mesh(new THREE.CylinderGeometry(0.3, 0.3, 0.9, 10, 1, false, 0, Math.PI), wood); lid.rotation.z = Math.PI / 2; lid.position.set(0, 0, 0.3); lid.castShadow = true; lidPivot.add(lid);
-    for (const bx of [-0.3, 0.3]) { const b = new THREE.Mesh(new THREE.BoxGeometry(0.06, 0.52, 0.62), gold); b.position.set(bx, 0.25, 0); g.add(b); }
-    const lock = new THREE.Mesh(new THREE.BoxGeometry(0.14, 0.16, 0.04), gold); lock.position.set(0, 0.45, 0.31); g.add(lock);
+    const closed = Assets.clone('village', 'Chest_Closed'), open = Assets.clone('village', 'Chest_Open');
+    closed.scale.setScalar(1.1); open.scale.setScalar(1.1); open.visible = false;
+    g.add(closed, open);
+    const lidPivot = { rotation: { _x: 0, get x() { return this._x; }, set x(v) { this._x = v; closed.visible = v === 0; open.visible = v !== 0; } } };
     W.scene.add(g);
     W.addCircle(x, z, 0.5, y - 1, y + 0.6);
     const it = { type: 'chest', id: id++, x, y: y + 0.4, z, r: 2, label: 'Open Chest', mesh: g, lid: lidPivot, openedDay: -1 };
