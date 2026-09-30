@@ -987,61 +987,171 @@ func _p_help() -> void:
 
 
 # ================================================================ map image
+const MAP_PX := 2  # map pixels per world meter (map covers -200..200 m)
+
+
 func build_map_image() -> ImageTexture:
 	if map_img:
 		return map_img
 	var W: World = game.world
-	var S := 400
-	var img := Image.create(S, S, false, Image.FORMAT_RGBA8)
-	for j in range(0, S, 2):
-		for i in range(0, S, 2):
-			var wx := i - 200.0
-			var wz := j - 200.0
-			var h := W.height_at(wx, wz)
-			var r := Vector2(wx, wz).length()
-			var col := Color8(78, 120, 50)
-			if h > 14.0 or r > 188.0:
-				col = Color8(110, 105, 98)
-			elif W.nz3.get_noise_2d(wx * 0.013 + 3.0, wz * 0.013) > 0.1 and r > 66.0:
-				col = Color8(52, 88, 40)
-			var shade := 1.0 - (W.height_at(wx + 2.0, wz) - h) * 0.08
-			img.fill_rect(Rect2i(i, j, 2, 2), Color(col.r * shade, col.g * shade, col.b * shade))
-	var put := func(x: float, z: float, rad: float, c: Color) -> void:
-		for dz in range(-ceili(rad), ceili(rad) + 1):
-			for dx in range(-ceili(rad), ceili(rad) + 1):
-				if dx * dx + dz * dz <= rad * rad:
-					var px := int(x + 200 + dx)
-					var pz := int(z + 200 + dz)
-					if px >= 0 and px < S and pz >= 0 and pz < S:
-						img.set_pixel(px, pz, c)
-	var water: Dictionary = W.water
-	put.call(water.x, water.z, water.r, Color8(58, 122, 168))
-	for rd in W.roads:
-		for k in rd.pts.size() - 1:
-			var a: Vector2 = rd.pts[k]
-			var b: Vector2 = rd.pts[k + 1]
-			var L := a.distance_to(b)
-			var t := 0.0
-			while t <= L:
-				var p := a.lerp(b, t / L)
-				put.call(p.x, p.y, rd.w / 2.0, Color8(184, 160, 120))
-				t += 1.0
-	put.call(0, 0, 12.5, Color8(154, 148, 136))
-	var a2 := 0.0
-	while a2 < TAU:
-		put.call(sin(a2) * W.fence_r, cos(a2) * W.fence_r, 0.6, Color8(106, 74, 42))
-		a2 += 0.01
+	var S := 400 * MAP_PX
+	# terrain colors per height-grid cell, hill-shaded, then smoothly upscaled
+	var N := World.N
+	var hs: PackedFloat32Array = W.heights
+	var cells := Image.create(N, N, false, Image.FORMAT_RGBA8)
+	for j in N:
+		var wz := -World.SIZE / 2.0 + j * World.RES
+		for i in N:
+			var wx := -World.SIZE / 2.0 + i * World.RES
+			var h := hs[j * N + i]
+			var hx := hs[j * N + mini(i + 1, N - 1)] - hs[j * N + maxi(i - 1, 0)]
+			var hz := hs[mini(j + 1, N - 1) * N + i] - hs[maxi(j - 1, 0) * N + i]
+			var r := sqrt(wx * wx + wz * wz)
+			var col := Color8(100, 142, 62).lerp(Color8(128, 160, 72), clampf(W.nz2.get_noise_2d(wx * 0.05, wz * 0.05) + 0.5, 0.0, 1.0))
+			if r > 66.0:
+				col = col.lerp(Color8(62, 100, 48), U.smoothstep(-0.1, 0.35, W.nz3.get_noise_2d(wx * 0.013 + 3.0, wz * 0.013)))
+			var rock := maxf(U.smoothstep(11.0, 16.0, h), U.smoothstep(182.0, 192.0, r))
+			col = col.lerp(Color8(138, 130, 118), rock)
+			var shade := clampf(1.0 + (hx + hz) * 0.1, 0.62, 1.3)  # light from the north-west
+			cells.set_pixel(i, j, Color(col.r * shade, col.g * shade, col.b * shade))
+	var full := (N - 1) * int(World.RES) * MAP_PX + 1
+	cells.resize(full, full, Image.INTERPOLATE_CUBIC)
+	var off := int((World.SIZE / 2.0 - 200.0) * MAP_PX)
+	var img := cells.get_region(Rect2i(off, off, S, S))
+	var brushes := {}
+	var stamp := func(x: float, z: float, r_px: float, c: Color, soft: float) -> void:
+		var b := _map_disc(brushes, r_px, c, soft)
+		var n := b.get_width()
+		img.blend_rect(b, Rect2i(0, 0, n, n), Vector2i(roundi((x + 200.0) * MAP_PX - n / 2.0), roundi((z + 200.0) * MAP_PX - n / 2.0)))
+	var rect := func(x0: float, z0: float, w: float, d: float, c: Color) -> void:
+		var r := Rect2i(roundi((x0 + 200.0) * MAP_PX), roundi((z0 + 200.0) * MAP_PX), maxi(1, roundi(w * MAP_PX)), maxi(1, roundi(d * MAP_PX)))
+		if c.a >= 1.0:
+			img.fill_rect(r, c)
+		else:
+			var tmp := Image.create(r.size.x, r.size.y, false, Image.FORMAT_RGBA8)
+			tmp.fill(c)
+			img.blend_rect(tmp, Rect2i(Vector2i.ZERO, r.size), r.position)
+	# pond with a sandy shore and deeper middle
+	var wt: Dictionary = W.water
+	stamp.call(wt.x, wt.z, (wt.r + 1.8) * MAP_PX, Color8(196, 182, 132), 2.0)
+	stamp.call(wt.x, wt.z, wt.r * MAP_PX, Color8(62, 128, 170), 1.5)
+	stamp.call(wt.x, wt.z, wt.r * 0.7 * MAP_PX, Color(0.13, 0.33, 0.52, 0.6), wt.r * 0.5 * MAP_PX)
+	# roads: darker edge, then the surface
+	for pass_i in 2:
+		for rd in W.roads:
+			var rr: float = rd.w / 2.0 * MAP_PX + (1.2 if pass_i == 0 else 0.0)
+			var rc := Color8(128, 106, 74) if pass_i == 0 else Color8(202, 178, 132)
+			for k in rd.pts.size() - 1:
+				var a: Vector2 = rd.pts[k]
+				var b: Vector2 = rd.pts[k + 1]
+				var L := a.distance_to(b)
+				var t := 0.0
+				while t <= L:
+					var p := a.lerp(b, t / L)
+					stamp.call(p.x, p.y, rr, rc, 1.0)
+					t += 0.5
+	# plaza
+	stamp.call(0.0, 0.0, 13.2 * MAP_PX, Color8(120, 112, 100), 1.0)
+	stamp.call(0.0, 0.0, 12.5 * MAP_PX, Color8(172, 164, 148), 1.0)
+	stamp.call(0.0, 0.0, 6.0 * MAP_PX, Color8(158, 150, 136), 1.0)
+	stamp.call(0.0, 0.0, 2.0 * MAP_PX, Color8(70, 130, 168), 1.0)
+	# your field: tilled rows inside a wooden border
+	var fr: Dictionary = W.farm.frect
+	var fx0: float = fr.minX + 1.5
+	var fz0: float = fr.minZ + 1.5
+	var fw: float = fr.maxX - fr.minX - 3.0
+	var fd: float = fr.maxZ - fr.minZ - 3.0
+	rect.call(fx0 - 0.5, fz0 - 0.5, fw + 1.0, fd + 1.0, Color8(96, 66, 38))
+	rect.call(fx0, fz0, fw, fd, Color8(118, 86, 50))
+	var row := 0.0
+	while row < fd:
+		rect.call(fx0, fz0 + row, fw, 0.5, Color8(140, 104, 62))
+		row += 1.5
+	# village fence (with gaps at the gates)
+	var fa := 0.0
+	while fa < TAU:
+		if not Village._near_gate(W, fa):
+			var fp := U.polar(fa, W.fence_r)
+			stamp.call(fp.x, fp.y, 1.1, Color8(92, 62, 34), 0.8)
+		fa += 0.25 / W.fence_r
+	# points of interest
+	stamp.call(W.pois.camp.x, W.pois.camp.y, 15.0 * MAP_PX, Color8(124, 102, 76), 8.0)
+	stamp.call(W.pois.camp.x, W.pois.camp.y, 1.5 * MAP_PX, Color8(230, 120, 40), 2.0)
+	var gp: Vector2 = W.pois.grave
+	rect.call(gp.x - 12.5, gp.y - 12.5, 25.0, 25.0, Color8(84, 84, 72))
+	rect.call(gp.x - 12.0, gp.y - 12.0, 24.0, 24.0, Color8(112, 114, 98))
+	for gi in range(-9, 10, 4):
+		for gj in range(-9, 10, 4):
+			rect.call(gp.x + gi - 0.5, gp.y + gj - 0.5, 1.0, 1.0, Color8(190, 188, 176))
+	stamp.call(W.pois.mine.x, W.pois.mine.y, 5.0 * MAP_PX, Color8(110, 104, 96), 1.5)
+	stamp.call(W.pois.mine.x, W.pois.mine.y, 3.5 * MAP_PX, Color8(28, 26, 24), 1.5)
+	# trees: soft shadow, canopy, sunlit highlight
+	var tree_col := {"common": Color8(56, 106, 44), "pine": Color8(36, 82, 54), "birch": Color8(108, 150, 64), "willow": Color8(78, 130, 74), "dead": Color8(112, 98, 80)}
+	for tr in W.tree_spots:
+		var tc: Color = tree_col.get(tr[3], tree_col.common)
+		var rp: float = snappedf(tr[2] * 0.75 * MAP_PX, 0.5)
+		stamp.call(tr[0] + 0.8, tr[1] + 0.8, rp + 0.5, Color(0, 0, 0, 0.3), 2.0)
+		stamp.call(tr[0], tr[1], rp, tc, 1.0)
+		stamp.call(tr[0] - rp * 0.12, tr[1] - rp * 0.12, snappedf(rp * 0.45, 0.5), tc.lightened(0.22), 1.5)
+	# buildings: drop shadow, dark outline, two-tone gabled roof with a ridge
 	for bd in W.buildings:
 		var w2: float = bd.d if bd.rot % 2 else bd.w
 		var d2: float = bd.w if bd.rot % 2 else bd.d
-		img.fill_rect(Rect2i(int(bd.x - w2 / 2 + 200), int(bd.z - d2 / 2 + 200), int(w2), int(d2)), Color8(224, 176, 80) if bd.type == "farmhouse" else Color8(200, 104, 58))
-	var fr: Dictionary = W.farm.frect
-	img.fill_rect(Rect2i(int(fr.minX + 201.5), int(fr.minZ + 201.5), int(fr.maxX - fr.minX - 3), int(fr.maxZ - fr.minZ - 3)), Color8(122, 90, 48))
-	put.call(W.pois.camp.x, W.pois.camp.y, 15, Color8(90, 74, 58))
-	img.fill_rect(Rect2i(int(W.pois.grave.x + 188), int(W.pois.grave.y + 188), 24, 24), Color8(106, 106, 90))
-	put.call(W.pois.mine.x, W.pois.mine.y, 4, Color8(34, 34, 34))
+		var x0: float = bd.x - w2 / 2.0
+		var z0: float = bd.z - d2 / 2.0
+		var roof := Color8(226, 178, 82) if bd.type == "farmhouse" else Color8(192, 98, 58).lerp(Color8(150, 110, 84), float(hash(bd.get("name", "")) % 100) / 200.0)
+		rect.call(x0 + 1.0, z0 + 1.0, w2, d2, Color(0, 0, 0, 0.35))
+		rect.call(x0 - 0.5, z0 - 0.5, w2 + 1.0, d2 + 1.0, Color8(60, 40, 28))
+		rect.call(x0, z0, w2, d2, roof)
+		if w2 >= d2:
+			rect.call(x0, z0 + d2 / 2.0, w2, d2 / 2.0, roof.darkened(0.18))
+			rect.call(x0, z0 + d2 / 2.0 - 0.25, w2, 0.5, roof.lightened(0.25))
+		else:
+			rect.call(x0 + w2 / 2.0, z0, w2 / 2.0, d2, roof.darkened(0.18))
+			rect.call(x0 + w2 / 2.0 - 0.25, z0, 0.5, d2, roof.lightened(0.25))
+	img.generate_mipmaps()
 	map_img = ImageTexture.create_from_image(img)
 	return map_img
+
+
+## Soft-edged disc brush (cached), radius in map pixels.
+func _map_disc(cache: Dictionary, r: float, col: Color, soft: float) -> Image:
+	var key := "%d|%s|%d" % [int(r * 4.0), col.to_html(), int(soft * 4.0)]
+	if cache.has(key):
+		return cache[key]
+	var n := int(ceil(r + soft)) * 2 + 2
+	var img := Image.create(n, n, false, Image.FORMAT_RGBA8)
+	var c := n / 2.0
+	for y in n:
+		for x in n:
+			var d := Vector2(x + 0.5 - c, y + 0.5 - c).length()
+			var a := clampf((r - d) / soft + 0.5, 0.0, 1.0)
+			if a > 0.0:
+				img.set_pixel(x, y, Color(col.r, col.g, col.b, col.a * a))
+	cache[key] = img
+	return img
+
+
+## Map color for a crop plot's state (transparent while still weedy).
+func plot_color(p: Dictionary) -> Color:
+	if p.state == "planted":
+		return Color("#ffd23a") if game.farm.ripe(p) else Color("#9be05a")
+	if p.state == "tilled":
+		return Color("#4a2e16")
+	return Color(0, 0, 0, 0)  # untouched soil: the map already shows it
+
+
+## True while none of the field is planted, so the maps point new players at it.
+func field_idle() -> bool:
+	for p in game.world.plots:
+		if p.state == "planted":
+			return false
+	return true
+
+
+func field_corners() -> Array:
+	var fr: Dictionary = game.world.farm.frect
+	return [Vector2(fr.minX + 1.5, fr.minZ + 1.5), Vector2(fr.maxX - 1.5, fr.minZ + 1.5), Vector2(fr.maxX - 1.5, fr.maxZ - 1.5), Vector2(fr.minX + 1.5, fr.maxZ - 1.5)]
 
 
 # ================================================================ minimap & big map widgets
@@ -1054,12 +1164,14 @@ class Minimap extends Control:
 	func setup(g, u) -> void:
 		game = g
 		ui = u
-		custom_minimum_size = Vector2(170, 170)
+		custom_minimum_size = Vector2(180, 180)
 		mouse_filter = Control.MOUSE_FILTER_STOP
 		tex_rect = TextureRect.new()
 		tex_rect.set_anchors_preset(Control.PRESET_FULL_RECT)
 		tex_rect.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
 		tex_rect.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		tex_rect.texture_filter = CanvasItem.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS
+		tex_rect.show_behind_parent = true  # markers drawn in _draw go on top of the map
 		mat = ShaderMaterial.new()
 		mat.shader = Shader.new()
 		mat.shader.code = """
@@ -1072,10 +1184,16 @@ void fragment() {
 	float r = length(d);
 	vec2 rd = vec2(d.x * cos(yaw) + d.y * sin(yaw), -d.x * sin(yaw) + d.y * cos(yaw));
 	vec2 uv = center + rd * zoom;
-	vec4 c = texture(TEXTURE, uv);
-	float edge = smoothstep(0.5, 0.485, r);
-	float ring = smoothstep(0.455, 0.47, r) * edge;
-	COLOR = vec4(mix(c.rgb, vec3(0.63, 0.49, 0.17), ring), edge);
+	vec3 c = texture(TEXTURE, uv).rgb;
+	if (uv.x < 0.0 || uv.y < 0.0 || uv.x > 1.0 || uv.y > 1.0) c = vec3(0.36, 0.34, 0.31);
+	c *= 1.0 - 0.35 * smoothstep(0.3, 0.45, r);   // soft inner vignette
+	float px = fwidth(r);
+	// bronze rim lit from the top-left, with dark inner and outer lines
+	vec3 rim = mix(vec3(0.42, 0.29, 0.1), vec3(0.98, 0.84, 0.48), clamp(0.55 - (d.x + d.y) * 1.3, 0.0, 1.0));
+	c = mix(c, vec3(0.08, 0.05, 0.02), smoothstep(0.438 - px, 0.438, r));
+	c = mix(c, rim, smoothstep(0.446 - px, 0.446, r));
+	c = mix(c, vec3(0.08, 0.05, 0.02), smoothstep(0.492 - px, 0.492, r));
+	COLOR = vec4(c, 1.0 - smoothstep(0.5 - px, 0.5, r));
 }
 """
 		tex_rect.material = mat
@@ -1102,27 +1220,59 @@ void fragment() {
 		var R := 48.0
 		var k := S / (R * 2.0)
 		var c := size / 2.0
+		var inner := S * 0.43
 		var rot := func(wx: float, wz: float) -> Vector2:
 			var d := Vector2(wx - P.position.x, wz - P.position.z)
 			# rotate so the view direction points up
 			var a: float = P.yaw
 			return c + Vector2(d.x * cos(a) - d.y * sin(a), d.x * sin(a) + d.y * cos(a)) * k
+		# your field: plot states, plus a pulsing outline (or an edge arrow) until something is planted
+		var gold := Color("#ffd23a")
+		var idle: bool = ui.field_idle()
+		var pulse := 0.5 + 0.5 * sin(Time.get_ticks_msec() * 0.006)
+		var corners := PackedVector2Array()
+		var fc := Vector2.ZERO
+		for q in ui.field_corners():
+			var sp: Vector2 = rot.call(q.x, q.y)
+			corners.append(sp)
+			fc += sp / 4.0
+		if fc.distance_to(c) < inner - 14.0:
+			for pl in game.world.plots:
+				draw_circle(rot.call(pl.pos.x, pl.pos.z), 1.35, ui.plot_color(pl))
+			corners.append(corners[0])
+			draw_polyline(corners, Color(gold, 0.45 + 0.55 * pulse) if idle else Color(gold, 0.5), 1.5 + pulse * 1.5 if idle else 1.2, true)
+		elif idle:
+			var dir := (fc - c).normalized()
+			var tip := c + dir * (inner - 3.0)
+			var side := Vector2(-dir.y, dir.x)
+			var arrow := PackedVector2Array([tip, tip - dir * 11.0 + side * 6.0, tip - dir * 11.0 - side * 6.0])
+			draw_colored_polygon(arrow, Color(gold, 0.6 + 0.4 * pulse))
+			draw_polyline(arrow + PackedVector2Array([arrow[0]]), Color(0, 0, 0, 0.7), 1.0, true)
 		for n in game.npcs:
 			var p: Vector2 = rot.call(n.position.x, n.position.z)
-			if p.distance_to(c) < S * 0.45:
-				draw_circle(p, 3.2 if n.marker_state != "" else 1.8, Color("#ffd23a") if n.marker_state != "" else Color("#f0f0f0"))
+			if p.distance_to(c) < inner - 4.0:
+				var quest: bool = n.marker_state != ""
+				draw_circle(p, 4.2 if quest else 2.8, Color(0, 0, 0, 0.6))
+				draw_circle(p, 3.2 if quest else 1.9, gold if quest else Color("#f4f0e6"))
 		for e in game.enemies:
 			if e.dead:
 				continue
 			var p: Vector2 = rot.call(e.position.x, e.position.z)
-			if p.distance_to(c) < S * 0.45:
-				draw_circle(p, 3.5 if e.def.get("boss", false) else 2.2, Color("#ff8a1a") if e.def.get("boss", false) else Color("#e02a2a"))
+			if p.distance_to(c) < inner - 4.0:
+				var boss: bool = e.def.get("boss", false)
+				draw_circle(p, 4.5 if boss else 3.1, Color(0, 0, 0, 0.6))
+				draw_circle(p, 3.5 if boss else 2.2, Color("#ff8a1a") if boss else Color("#e8322a"))
+		# player: view cone + arrow
+		var cone := PackedVector2Array([c, c + Vector2(-17, -30), c + Vector2(17, -30)])
+		draw_colored_polygon(cone, Color(1, 1, 1, 0.12))
 		var pts := PackedVector2Array([c + Vector2(0, -8), c + Vector2(6, 7), c + Vector2(0, 3), c + Vector2(-6, 7)])
 		draw_colored_polygon(pts, Color.WHITE)
-		draw_polyline(pts + PackedVector2Array([pts[0]]), Color.BLACK, 1.2)
+		draw_polyline(pts + PackedVector2Array([pts[0]]), Color.BLACK, 1.4, true)
+		# north marker riding on the rim
 		var npos: Vector2 = rot.call(P.position.x, P.position.z - 1000.0)
-		var nd := (npos - c).normalized() * (S / 2.0 - 13.0)
-		draw_string(ui.title_font, c + nd + Vector2(-6, 6), "N", HORIZONTAL_ALIGNMENT_LEFT, -1, 15, Color("#ffd23a"))
+		var nd := (npos - c).normalized() * (S * 0.469)
+		draw_circle(c + nd, 8.5, Color(0.1, 0.07, 0.03))
+		draw_string(ui.title_font, c + nd + Vector2(-5.5, 5), "N", HORIZONTAL_ALIGNMENT_LEFT, -1, 14, gold)
 
 
 class BigMap extends Control:
@@ -1132,6 +1282,11 @@ class BigMap extends Control:
 	func setup(g, u) -> void:
 		game = g
 		ui = u
+		texture_filter = CanvasItem.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS
+
+	func _process(_dt: float) -> void:
+		if is_visible_in_tree():
+			queue_redraw()
 
 	func _draw() -> void:
 		var tex: Texture2D = ui.build_map_image()
@@ -1139,16 +1294,49 @@ class BigMap extends Control:
 		draw_texture_rect(tex, Rect2(Vector2.ZERO, Vector2(s, s)), false)
 		var k := s / 400.0
 		var tp := func(x: float, z: float) -> Vector2: return Vector2((x + 200.0) * k, (z + 200.0) * k)
-		for l in game.world.map_labels:
+		# your field: plot states and a gold outline (pulsing until something is planted)
+		var gold := Color("#ffd23a")
+		var idle: bool = ui.field_idle()
+		var pulse := 0.5 + 0.5 * sin(Time.get_ticks_msec() * 0.006)
+		var corners := PackedVector2Array()
+		for q in ui.field_corners():
+			corners.append(tp.call(q.x, q.y))
+		corners.append(corners[0])
+		for pl in game.world.plots:
+			var pp: Vector2 = tp.call(pl.pos.x, pl.pos.z)
+			draw_rect(Rect2(pp - Vector2.ONE * 0.6 * k, Vector2.ONE * 1.2 * k), ui.plot_color(pl))
+		draw_polyline(corners, Color(gold, 0.45 + 0.55 * pulse) if idle else Color(gold, 0.6), 2.0 + (pulse * 2.0 if idle else 0.0), true)
+		# labels: most important first; each tries a few spots and is skipped if none is free
+		var labels: Array = game.world.map_labels.duplicate()
+		var rank := func(l: Dictionary) -> int:
+			if l.text == "Your Field":
+				return 0
+			return 1 if Vector2(l.x, l.z).length() > game.world.fence_r else 3
+		labels.sort_custom(func(a, b): return rank.call(a) < rank.call(b))
+		var placed: Array[Rect2] = []
+		for l in labels:
 			var p: Vector2 = tp.call(l.x, l.z)
-			var col := Color("#ff8a6a") if l.get("danger", false) else Color("#fff4d0")
-			draw_string_outline(ui.title_font, p + Vector2(-60, 5), l.text, HORIZONTAL_ALIGNMENT_CENTER, 120, 14, 5, Color(0, 0, 0, 0.85))
-			draw_string(ui.title_font, p + Vector2(-60, 5), l.text, HORIZONTAL_ALIGNMENT_CENTER, 120, 14, col)
+			var fs := 14 if rank.call(l) < 2 else 12
+			var tw: float = ui.title_font.get_string_size(l.text, HORIZONTAL_ALIGNMENT_LEFT, -1, fs).x
+			for dy in [0.0, -13.0, 13.0, -26.0, 26.0]:
+				var box := Rect2(p.x - tw / 2.0 - 2.0, p.y + dy - fs * 0.7, tw + 4.0, fs * 1.1)
+				if placed.any(func(o: Rect2) -> bool: return o.intersects(box)):
+					continue
+				placed.append(box)
+				var col := Color("#ff8a6a") if l.get("danger", false) else Color("#fff4d0")
+				if l.text == "Your Field":
+					col = gold
+				if dy != 0.0:
+					draw_circle(p, 2.0, col)
+				var at := Vector2(p.x - tw / 2.0, p.y + dy + fs * 0.35)
+				draw_string_outline(ui.title_font, at, l.text, HORIZONTAL_ALIGNMENT_LEFT, -1, fs, 4, Color(0, 0, 0, 0.85))
+				draw_string(ui.title_font, at, l.text, HORIZONTAL_ALIGNMENT_LEFT, -1, fs, col)
+				break
 		for n in game.npcs:
 			if n.marker_state != "":
 				var p: Vector2 = tp.call(n.position.x, n.position.z)
 				draw_string_outline(ui.title_font, p + Vector2(-5, -4), n.marker_state, HORIZONTAL_ALIGNMENT_LEFT, -1, 18, 5, Color.BLACK)
-				draw_string(ui.title_font, p + Vector2(-5, -4), n.marker_state, HORIZONTAL_ALIGNMENT_LEFT, -1, 18, Color("#ffd23a"))
+				draw_string(ui.title_font, p + Vector2(-5, -4), n.marker_state, HORIZONTAL_ALIGNMENT_LEFT, -1, 18, gold)
 		var P = game.player
 		var c: Vector2 = tp.call(P.position.x, P.position.z)
 		var f := Vector2(-sin(P.yaw), -cos(P.yaw))  # facing direction (map x = world x, map y = world z)

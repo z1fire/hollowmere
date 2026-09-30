@@ -676,7 +676,6 @@ static func _farmhouse(B: Builder, b: Dictionary, R: RandomNumberGenerator, W: W
 	W.spawn_point = {"pos": Vector3(sp.x, b.floorY, sp.z), "yaw": b.ang}
 	var bed_p := B.P(-hw + 2.0, -hd + 1.4)
 	W.bed_point = {"pos": Vector3(bed_p.x, b.floorY + 0.1, bed_p.z), "yaw": b.ang}
-	W.map_labels.append({"x": b.x, "z": b.z, "text": "Home"})
 
 
 # ================================================================ farm field
@@ -735,7 +734,7 @@ static func _farm_field(W: World, R: RandomNumberGenerator) -> void:
 	hB.box("wood", -7.5, 0.3, 4.5, 2.2, 0.6, 1.0, "#8a6038")
 	hB.box("color", -7.5, 0.58, 4.5, 2.0, 0.04, 0.8, "#3a6a8a", false)
 	_add(W, batch.build(W.mats), "Farm")
-	W.map_labels.append({"x": f.fx, "z": f.fz, "text": "Field"})
+	W.map_labels.append({"x": f.fx, "z": f.fz, "text": "Your Field"})
 	var fp := B.P(-fw / 2 - 1.2, 2.2)
 	W.npc_spots.append({"role": "farmer", "x": fp.x, "z": fp.z, "y": W.plaza_y, "yaw": ang - PI / 2})
 

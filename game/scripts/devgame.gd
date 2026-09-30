@@ -124,6 +124,8 @@ func _run() -> void:
 	await shot("skills", 5)
 	game.ui.open("inventory")
 	await shot("inventory", 5)
+	game.ui.open("map")
+	await shot("map", 5)
 	game.ui.close()
 	game.save_game(true)
 	check("save written", FileAccess.file_exists(Game.SAVE_PATH))

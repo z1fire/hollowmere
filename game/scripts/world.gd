@@ -35,6 +35,7 @@ var herbs: Array = []
 var chests: Array = []
 var map_labels: Array = []
 var rock_spots: Array = []
+var tree_spots: Array = []  # [x, z, size, kind] for the map
 var spawn_point := {}
 var bed_point := {}
 var animated: Array = []
@@ -596,6 +597,7 @@ func scatter_vegetation() -> void:
 			elif R.randf() < 0.22:
 				kind = "birch"
 			var s := R.randf_range(2.3, 3.3)
+			tree_spots.append([px, pz, s, kind])
 			var tint := Color.from_hsv(R.randf_range(0.2, 0.32), R.randf_range(0.0, 0.25), R.randf_range(0.85, 1.05))
 			props.add("nature", U.pick(R, trees[kind]), U.xf(Vector3(px, height_at(px, pz) - 0.15, pz), R.randf_range(0, TAU), Vector3(s, s * R.randf_range(0.9, 1.15), s)), tint)
 			add_cylinder_collider(Vector3(px, height_at(px, pz) + 2.0, pz), 0.14 * s, 5.0)

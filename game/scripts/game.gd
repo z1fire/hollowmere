@@ -88,6 +88,11 @@ func setup(p_seed: int, save_data: Dictionary, p_settings: Dictionary, p_version
 	farm = Farm.new()
 	add_child(farm)
 	farm.setup(self)
+	progress.call("Drawing the map...", 0.98)
+	await get_tree().process_frame
+	var t0 := Time.get_ticks_msec()
+	ui.build_map_image()
+	print("[gen] Drawing the map... %d ms" % (Time.get_ticks_msec() - t0))
 	for id in Data.QUESTS:
 		quests[id] = {"state": "available", "progress": 0}
 	if not save_data.is_empty():
