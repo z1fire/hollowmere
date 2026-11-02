@@ -802,7 +802,7 @@ static func _fence(W: World, R: RandomNumberGenerator) -> void:
 					batch.add_box("wood", U.xf(Vector3(m.x, (y + yq) / 2 + hh, m.y), ry, Vector3(0.08, 0.14, length + 0.1), -tilt), MID)
 				W.add_box_collider(U.xf(Vector3(m.x, (y + yq) / 2 + 0.8, m.y), ry), Vector3(0.3, 1.8, length))
 		a = a2
-	var names := ["Goblin Hills", "Old Graveyard", "Collapsed Mine"]
+	var names := ["Goblin Hills", "Old Graveyard", "Old Silver Mine"]
 	for i in W.gates.size():
 		var g: float = W.gates[i]
 		var p := U.polar(g, FR)

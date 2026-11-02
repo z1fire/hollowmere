@@ -47,6 +47,8 @@ const ITEMS := {
 	"bone_dust": {"name": "Bone Dust", "kind": "material", "icon": "🦴", "price": 10, "desc": "Mages pay well for this."},
 	"moonpetal": {"name": "Moonpetal", "kind": "material", "icon": "🌸", "price": 9, "desc": "A softly glowing herb."},
 	"old_coin": {"name": "Ancient Coin", "kind": "material", "icon": "🪙", "price": 35, "desc": "Minted before Hollowmere was founded."},
+	"silver_ore": {"name": "Silver Ore", "kind": "material", "icon": "🪨", "price": 24, "desc": "Raw silver from the old mine. The smith pays well."},
+	"spider_silk": {"name": "Spider Silk", "kind": "material", "icon": "🕸️", "price": 9, "desc": "Strong, sticky thread from a cave spider."},
 }
 
 const CROPS := {
@@ -117,9 +119,13 @@ const ENEMIES := {
 	"wolf": {"name": "Grey Wolf", "hp": 32, "dmg": [4, 7], "speed": 5.6, "range": 1.7, "rate": 1.1, "aggro": 17.0, "xp": 14, "gold": [1, 4], "drops": [["wolf_pelt", 0.55]], "model": "wolf", "group": "wolf"},
 	"goblin": {"name": "Goblin Raider", "hp": 48, "dmg": [6, 9], "speed": 4.1, "range": 1.8, "rate": 1.2, "aggro": 16.0, "xp": 22, "gold": [3, 9], "drops": [["goblin_ear", 0.6], ["hp_potion", 0.1], ["bread", 0.15]], "model": "goblin", "group": "goblin"},
 	"goblin_archer": {"name": "Goblin Archer", "hp": 38, "dmg": [5, 8], "speed": 3.8, "range": 16.0, "rate": 2.0, "aggro": 20.0, "xp": 24, "gold": [3, 9], "drops": [["goblin_ear", 0.6], ["short_bow", 0.04]], "model": "goblin", "ranged": true, "group": "goblin"},
-	"goblin_chief": {"name": "Goblin Warchief", "hp": 320, "dmg": [13, 19], "speed": 4.3, "range": 2.3, "rate": 1.4, "aggro": 18.0, "xp": 180, "gold": [60, 90], "drops": [["old_coin", 1.0], ["hp_potion", 1.0]], "model": "goblin", "scale": 1.55, "boss": true, "group": "goblin_chief", "respawn": 600.0},
+	"goblin_chief": {"name": "Goblin Warchief", "hp": 320, "dmg": [13, 19], "speed": 4.3, "range": 2.3, "rate": 1.4, "aggro": 18.0, "xp": 180, "gold": [60, 90], "drops": [["old_coin", 1.0], ["hp_potion", 1.0]], "model": "goblin", "scale": 1.55, "boss": true, "group": "goblin_chief", "respawn": 600.0, "fallen": ["The Warchief has fallen!", "Return to the Mayor with the news"]},
 	"skeleton": {"name": "Restless Skeleton", "hp": 58, "dmg": [8, 11], "speed": 3.3, "range": 1.9, "rate": 1.3, "aggro": 15.0, "xp": 30, "gold": [4, 10], "drops": [["bone_dust", 0.6], ["old_coin", 0.06]], "model": "skeleton", "group": "skeleton"},
 	"skeleton_archer": {"name": "Skeleton Archer", "hp": 44, "dmg": [7, 10], "speed": 3.0, "range": 18.0, "rate": 2.2, "aggro": 20.0, "xp": 32, "gold": [4, 10], "drops": [["bone_dust", 0.6]], "model": "skeleton", "ranged": true, "group": "skeleton"},
+	# the old silver mine
+	"cave_spider": {"name": "Cave Spider", "hp": 36, "dmg": [5, 8], "speed": 5.0, "range": 1.7, "rate": 1.0, "aggro": 12.0, "xp": 20, "gold": [2, 6], "drops": [["spider_silk", 0.5]], "model": "spider", "group": "spider"},
+	"miner": {"name": "Restless Miner", "hp": 70, "dmg": [9, 13], "speed": 3.2, "range": 1.9, "rate": 1.3, "aggro": 13.0, "xp": 36, "gold": [6, 14], "drops": [["silver_ore", 0.35], ["bone_dust", 0.4], ["old_coin", 0.08]], "model": "skeleton", "group": "miner"},
+	"foreman": {"name": "The Hollow Foreman", "hp": 460, "dmg": [15, 22], "speed": 3.6, "range": 2.7, "rate": 1.5, "aggro": 15.0, "xp": 260, "gold": [90, 140], "drops": [["old_coin", 1.0], ["hp_potion", 1.0], ["silver_ore", 1.0]], "model": "skeleton", "scale": 1.6, "boss": true, "group": "foreman", "respawn": 900.0, "fallen": ["The Hollow Foreman crumbles!", "Return to the Gate Guard with the news"]},
 }
 
 const SHOPS := {
@@ -172,6 +178,14 @@ const QUESTS := {
 		"offer": "Goblins have made camp outside our walls, and their Warchief grows bolder by the day. Hollowmere needs a hero. Even a farmer will do.",
 		"thanks": "You did it! Hollowmere is in your debt. Take this blade - it belonged to the last knight of this village.",
 	},
+	"mine": {
+		"giver": "guard", "title": "Silence in the Deep",
+		"desc": "Descend into the old silver mine and defeat the Hollow Foreman in the deepest hall.",
+		"type": "kill", "target": "foreman", "count": 1,
+		"reward": {"gold": 250, "items": [["chainmail", 1], ["hp_potion", 3]], "xp": {"melee": 70}},
+		"offer": "The diggers finally cleared the old mine entrance - then came running back up white as ghosts. Say the foreman who died in the cave-in still walks down there, swinging his axe. Go down and put him to rest. Bring a torch. And potions.",
+		"thanks": "The Foreman, laid to rest at last... Hollowmere owes you. Take this chain shirt - you'll want it if you go back down.",
+	},
 	"pelts": {
 		"giver": "smith", "title": "Fur for the Forge",
 		"desc": "Bring 4 wolf pelts to the blacksmith.",
@@ -190,14 +204,14 @@ const NAMES := {
 const ROLES := {
 	"mayor": {"title": "Mayor", "quest": "goblins", "lines": ["Welcome to Hollowmere, friend. We're simple folk, but proud.", "The council meets on the first of every month. Nobody ever comes.", "If only we still had a knight..."]},
 	"smith": {"title": "Blacksmith", "shop": "smith", "quest": "pelts", "lines": ["Steel don't lie. Swing it enough and you'll learn what it wants.", "Mind the forge, it bites.", "The more you fight up close, the stronger your arm gets. That's just how it works."]},
-	"innkeeper": {"title": "Innkeeper", "shop": "inn", "service": "rest", "lines": ["Welcome to the Tipsy Turnip! Mind the step, it's crooked.", "A warm bed is 10 gold. You'll wake at dawn, fresh as a daisy.", "Adventurers used to fill this place. Before the mine collapsed."]},
+	"innkeeper": {"title": "Innkeeper", "shop": "inn", "service": "rest", "lines": ["Welcome to the Tipsy Turnip! Mind the step, it's crooked.", "A warm bed is 10 gold. You'll wake at dawn, fresh as a daisy.", "Adventurers used to fill this place. Maybe now the mine's open again..."]},
 	"merchant": {"title": "Merchant", "shop": "general", "lines": ["Seeds, potions, tools! I've got what you need.", "I'll buy anything you grow. Pumpkins especially!", "Prices are fair. Mostly."]},
 	"herbalist": {"title": "Herbalist", "shop": "herbalist", "quest": "herbs", "lines": ["The forest speaks, if you listen.", "Nature magic grows with use - like any garden.", "Moonpetals only glow for those who look."]},
 	"mage": {"title": "Court Mage", "shop": "mage", "quest": "skeletons", "lines": ["Magic is merely will, given shape.", "Cast enough spells and the world will call you Mage. Cast more and they will call you worse.", "Mind the crystal. It hums when it's hungry."]},
 	"hunter": {"title": "Huntress", "shop": "hunter", "quest": "wolves", "lines": ["Aim a little high. Arrows drop.", "The wolves come from the north woods.", "Every arrow you loose makes your eye sharper."]},
 	"priest": {"title": "Priest", "service": "heal", "lines": ["May the Light keep you, child.", "Wounded? Come, let me mend you.", "The graveyard was hallowed ground, once."]},
 	"farmer": {"title": "Old Farmer", "quest": "harvest", "lines": ["Knew your father. Good man. Terrible at cards.", "Wheat grows quick. Pumpkins take their sweet time.", "A farmer can be anything, if they put their back into it."]},
-	"guard": {"title": "Gate Guard", "lines": ["Stay sharp out there. Goblins to one side, graveyard to the other.", "The mine's been caved in for years. Someday someone will dig it out.", "Move along, citizen."]},
+	"guard": {"title": "Gate Guard", "quest": "mine", "lines": ["Stay sharp out there. Goblins to one side, graveyard to the other.", "They dug out the old mine entrance. Wish they hadn't.", "Mind the spiders down there. Big as dogs, they say.", "Move along, citizen."]},
 	"villager": {"title": "Villager", "lines": ["Lovely day, isn't it?", "Have you tried the stew at the Tipsy Turnip? It's legendary.", "My cousin swears he saw a skeleton walking by the graveyard.", "They say the old mine goes deep. Deeper than anyone's dared.", "You're the farmer's kid! My, you've grown.", "The merchant overcharges for potions, but what can you do.", "I heard the Warchief is twice the size of a man!"]},
 	"patron": {"title": "Tavern Patron", "lines": ["*hic* ...another round!", "I used to be an adventurer like you.", "Don't go near the mine. Trust me."]},
 }

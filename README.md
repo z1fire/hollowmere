@@ -17,12 +17,13 @@ On Android, open the APK and allow "install unknown apps" for your browser when 
 - **Dynamic classes** — 20+ class titles (Brawler → Fighter → Warrior → Knight → Champion, Archer, Druid, Sorcerer, Paladin, Spellblade, Arcane Archer, Warden...).
 - **Farming** — till, plant, and harvest wheat, carrots and pumpkins; sell crops for gold.
 - **Combat** — pitchforks, swords, axes, bows, thorn bolts, lightning, fireballs and healing magic; wolves, goblins, skeletons, and the Goblin Warchief boss.
+- **The Old Silver Mine** — a procedurally carved cave level under the hills: torch-lit tunnels with timber supports and rails, caverns with silver veins to mine, cave spiders, restless miners, treasure chests, and the Hollow Foreman boss. The mine has its own explore-as-you-go map.
 - **Quests, shops, loot chests, herbs, a day/night cycle**, a minimap and a full map, autosave.
 - **Touch controls** built for phones and tablets (plus keyboard & mouse on desktop).
 - **High-quality stylized 3D** — fully animated characters and monsters, hand-crafted models for trees, props, furniture and crops, photo-scanned PBR materials, image-based sky lighting, bloom and colour grading, with automatic level-of-detail so it stays smooth on phones (Low / Medium / High graphics settings).
 
 ## 🗺️ Roadmap
-The current release covers the first region: Hollowmere village and its surrounding wilds. The **collapsed mine** and the **sealed crypt** are the entrances to future regions.
+The current release covers Hollowmere village, its surrounding wilds, and the first level of the old silver mine. The **cave-in** at the bottom of the mine and the **sealed crypt** are the entrances to future regions.
 
 ## 🎨 Art credits
 All 3D models and textures are CC0 (public domain) — thank you to their creators:

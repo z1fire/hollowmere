@@ -26,6 +26,7 @@ var last_hit := 0.0
 var bar: MeshInstance3D
 var bar_mat: ShaderMaterial
 var spawn_pos := Vector3.ZERO
+var under := false  # lives in the mine (only active while the player is down there)
 
 
 func setup(g, s: Dictionary) -> Enemy:
@@ -33,6 +34,7 @@ func setup(g, s: Dictionary) -> Enemy:
 	spawn = s
 	type = s.type
 	def = Data.ENEMIES[type]
+	under = s.get("under", false)
 	collision_layer = 4
 	collision_mask = 1
 	actor = Actor.new()
@@ -56,8 +58,20 @@ func setup(g, s: Dictionary) -> Enemy:
 				actor.setup("skeleton_warrior", {"own_materials": true, "right": "axe_1handed", "left": "shield_round"})
 		"skeleton_archer":
 			actor.setup("skeleton_rogue", {"own_materials": true, "right": "crossbow_2handed", "show": ["Skeleton_Rogue_Hood"]})
-	radius = 0.5 if def.model == "wolf" else def.get("scale", 1.0) * 0.42
-	height = 0.95 if def.model == "wolf" else (1.3 * def.get("scale", 1.0) if def.model == "goblin" else 1.8)
+		"cave_spider":
+			actor.setup("spider", {"own_materials": true})
+		"miner":
+			actor.setup("skeleton_minion", {"own_materials": true, "right": "axe_1handed"})
+			for m in actor.materials:
+				if m is BaseMaterial3D:
+					(m as BaseMaterial3D).albedo_color *= Color("#c9b9a2")
+		"foreman":
+			actor.setup("skeleton_warrior", {"own_materials": true, "scale": 1.6, "right": "axe_2handed"})
+			for m in actor.materials:
+				if m is BaseMaterial3D:
+					(m as BaseMaterial3D).albedo_color *= Color("#b4c2ff")
+	radius = 0.5 if def.model == "wolf" else (0.55 if def.model == "spider" else def.get("scale", 1.0) * 0.42)
+	height = {"wolf": 0.95, "spider": 0.75, "goblin": 1.3 * def.get("scale", 1.0)}.get(def.model, 1.8 * def.get("scale", 1.0))
 	var cs := CollisionShape3D.new()
 	var cap := CapsuleShape3D.new()
 	cap.radius = radius
@@ -94,7 +108,7 @@ void fragment() { ALBEDO = UV.x < fill ? col.rgb : vec3(0.12, 0.02, 0.02); ALPHA
 
 func respawn() -> void:
 	var W: World = game.world
-	spawn_pos = Vector3(spawn.x, W.height_at(spawn.x, spawn.z) + 0.2, spawn.z)
+	spawn_pos = Vector3(spawn.x, spawn.y if spawn.has("y") else W.height_at(spawn.x, spawn.z) + 0.2, spawn.z)
 	position = spawn_pos
 	hp = def.hp
 	max_hp = def.hp
@@ -151,6 +165,10 @@ func die() -> void:
 
 func _physics_process(dt: float) -> void:
 	var P = game.player
+	if under != game.in_mine:
+		visible = false
+		if not dead:
+			return
 	if dead:
 		dead_t += dt
 		if dead_t > 3.0:
@@ -167,9 +185,9 @@ func _physics_process(dt: float) -> void:
 	var p: Vector3 = P.global_position
 	var to := Vector2(p.x - position.x, p.z - position.z)
 	var dist := to.length()
-	var far := dist > 110.0
+	var far := dist > (34.0 if under else 110.0)  # no seeing through cave rock
 	visible = not far
-	actor.anim.active = dist < 70.0
+	actor.anim.active = dist < (30.0 if under else 70.0)
 	if far and state == "idle":
 		return
 	var home_d := Vector2(position.x - spawn.x, position.z - spawn.z).length()
@@ -238,7 +256,7 @@ func _physics_process(dt: float) -> void:
 	# stay out of the village
 	var r := Vector2(position.x, position.z).length()
 	var fr: float = game.world.fence_r + 1.5
-	if r < fr:
+	if r < fr and not under:
 		position.x *= fr / r
 		position.z *= fr / r
 	rotation.y = yaw

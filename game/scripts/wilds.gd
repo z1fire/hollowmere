@@ -1,6 +1,6 @@
 class_name Wilds
 extends RefCounted
-## Goblin camp, graveyard, collapsed mine, pond, herbs, treasure chests and enemy spawns.
+## Goblin camp, graveyard, mine entrance, pond, herbs, treasure chests and enemy spawns.
 
 const DARK := "#6a5040"
 
@@ -132,8 +132,10 @@ static func _graveyard(W: World, R: RandomNumberGenerator, batch: MeshBatch) -> 
 static func _mine(W: World, R: RandomNumberGenerator, batch: MeshBatch) -> void:
 	var c: Vector2 = W.pois.mine
 	var B := _at(W, batch, c)
-	W.map_labels.append({"x": c.x, "z": c.y, "text": "Collapsed Mine"})
-	B.prop("dungeon", "rubble_large", 0, 0, -1.2, 0.0, 0.55, {"collide": false})
+	W.map_labels.append({"x": c.x, "z": c.y, "text": "Old Silver Mine"})
+	# the rubble has been dug aside - the way in is open
+	B.prop("dungeon", "rubble_large", 3.4, 0, -0.6, 0.6, 0.45, {"collide": false})
+	B.prop("dungeon", "rubble_half", -3.2, 0, -0.2, 2.0, 0.6, {"collide": false})
 	for s in [-1.0, 1.0]:
 		B.prop("dungeon", "torch_lit", s * 2.6, 0, -1.4, 0.0, 1.2, {"collide": false})
 	for i in 14:
@@ -161,7 +163,10 @@ static func _mine(W: World, R: RandomNumberGenerator, batch: MeshBatch) -> void:
 	B.cyl("color", 2.4, 1.0, 0.3, 0.06, 2.0, "#2a2a2a", true, 6)
 	B.box("window", 2.4, 2.0, 0.3, 0.22, 0.3, 0.22, null, false)
 	var ip := B.P(0, -0.8)
-	W.interactables.append({"type": "mine", "pos": Vector3(ip.x, B.y + 1.2, ip.z), "r": 3.0, "label": "Mine Entrance"})
+	W.interactables.append({"type": "mine", "pos": Vector3(ip.x, B.y + 1.2, ip.z), "r": 3.0, "label": "Enter the mine"})
+	var out := B.P(0, 3.2)
+	var face := B.t.basis.z
+	W.mine_surface = {"pos": Vector3(out.x, W.height_at(out.x, out.z) + 0.3, out.z), "yaw": atan2(-face.x, -face.z)}
 
 
 static func _pond(W: World, R: RandomNumberGenerator, batch: MeshBatch) -> void:

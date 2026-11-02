@@ -232,7 +232,7 @@ for (const [f, url] of Object.entries(FONTS)) {
 // Needs Python fonttools (pip install fonttools); falls back to the full font otherwise.
 {
   const full = await fetchTo('https://github.com/googlefonts/noto-emoji/raw/main/2D/fonts/NotoColorEmoji-noflags.ttf', path.join(CACHE, 'NotoColorEmoji.ttf'));
-  const EMOJI = '⛏️🔱🗡️⚔️🪓🏹🌿💚⚡🔥👕🦺🛡️🥋🌾🥕🎃🧪🔮🍞🍲🐺👂🦴🌸🪙🎒📜📖🗺️⚙️❤💧✋⤒☀️🌙❗✅✔💬📋🛒🛏️✨💾🎛️❓⬆️🏠📱⚜🧭🔒🌟🍺🐉👑⭐🎯🪨🍄🌲🏰🧙🗝️🕯️💀🪦🌕🌑';
+  const EMOJI = '⛏️🔱🗡️⚔️🪓🏹🌿💚⚡🔥👕🦺🛡️🥋🌾🥕🎃🧪🔮🍞🍲🐺👂🦴🌸🪙🎒📜📖🗺️⚙️❤💧✋⤒☀️🌙❗✅✔💬📋🛒🛏️✨💾🎛️❓⬆️🏠📱⚜🧭🔒🌟🍺🐉👑⭐🎯🪨🍄🌲🏰🧙🗝️🕯️💀🪦🌕🌑🕸️';
   const cps = [...new Set([...EMOJI].map((c) => c.codePointAt(0)))].map((c) => 'U+' + c.toString(16).toUpperCase()).join(',');
   const out = path.join(OUT, 'fonts', 'Emoji.ttf');
   try {

@@ -48,6 +48,9 @@ var update_bar: PanelContainer
 var hurt_a := 0.0
 var input_ctl: InputCtl
 var map_img: ImageTexture
+var mine_base: Image
+var mine_disp: Image
+var mine_tex: ImageTexture
 
 
 func setup(g) -> GameUI:
@@ -815,13 +818,22 @@ func _p_board() -> void:
 
 
 func _p_map() -> void:
+	if game.in_mine:
+		_title("⛏️ The Old Silver Mine")
+		var mm := BigMap.new()
+		mm.setup(game, self)
+		mm.custom_minimum_size = Vector2(700, 700)
+		mm.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
+		panel_body.add_child(mm)
+		panel_body.add_child(_lbl("The map fills in as you explore. The green ▲ is the ladder out.", 15, INK_D))
+		return
 	_title("🗺️ Map of Hollowmere")
 	var bm := BigMap.new()
 	bm.setup(game, self)
 	bm.custom_minimum_size = Vector2(700, 700)
 	bm.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
 	panel_body.add_child(bm)
-	panel_body.add_child(_lbl("More regions will open beyond the collapsed mine in future updates.", 15, INK_D))
+	panel_body.add_child(_lbl("Follow the → Old Silver Mine signpost at the village gates to find the mine. Deeper levels and the sealed crypt will open in future updates.", 15, INK_D))
 
 
 func _p_dialog() -> void:
@@ -1149,6 +1161,95 @@ func field_idle() -> bool:
 	return true
 
 
+const MINE_PX := 3  # mine map pixels per metre
+const MINE_FOG := Color(0.055, 0.047, 0.04)
+
+
+## The map the minimap and big map show right now: the valley, or the mine while you're down there.
+func map_frame() -> Dictionary:
+	if game.in_mine:
+		var M: Dictionary = game.world.mine
+		return {"tex": mine_map(), "x0": M.x0, "z0": M.z0, "size": M.size, "r": 20.0, "outside": MINE_FOG}
+	return {"tex": build_map_image(), "x0": -200.0, "z0": -200.0, "size": 400.0, "r": 48.0, "outside": Color(0.36, 0.34, 0.31)}
+
+
+## Mine map: drawn once from the cave's shape, then shown only where you've explored.
+func mine_map() -> ImageTexture:
+	var M: Dictionary = game.world.mine
+	var cells := Mine.G - 1
+	if mine_tex == null:
+		var S := cells * MINE_PX
+		mine_base = Image.create(S, S, false, Image.FORMAT_RGBA8)
+		var x0: float = M.x0
+		var z0: float = M.z0
+		var LV: PackedFloat32Array = M.LV
+		for py in S:
+			var z := z0 + (py + 0.5) / MINE_PX
+			for px in S:
+				var x := x0 + (px + 0.5) / MINE_PX
+				var o := Mine.open_at(M, x, z)
+				var col := Color8(34, 29, 26)
+				if o > 0.5:
+					col = Color8(152, 134, 110).lerp(Color8(100, 88, 76), clampf(-Mine._bilin(M, LV, x, z) / 8.0, 0.0, 1.0))
+				elif o > 0.0:
+					col = Color8(226, 204, 160)  # wall edge
+				elif o > -1.0:
+					col = Color8(60, 51, 44)
+				mine_base.set_pixel(px, py, col)
+		mine_disp = Image.create(S, S, false, Image.FORMAT_RGBA8)
+		mine_disp.fill(MINE_FOG)
+		var rev: PackedByteArray = M.revealed
+		for k in rev.size():
+			if rev[k] != 0:
+				_reveal_cell(k, cells)
+		(M.reveal_new as Array).clear()
+		mine_tex = ImageTexture.create_from_image(mine_disp)
+	var fresh: Array = M.reveal_new
+	if fresh.size() > 0:
+		for k in fresh:
+			_reveal_cell(k, cells)
+		fresh.clear()
+		mine_tex.update(mine_disp)
+	return mine_tex
+
+
+func _reveal_cell(k: int, cells: int) -> void:
+	var o := Vector2i((k % cells) * MINE_PX, (k / cells) * MINE_PX)
+	mine_disp.blit_rect(mine_base, Rect2i(o, Vector2i(MINE_PX, MINE_PX)), o)
+
+
+## Mine icons (explored areas only) for a map; `tp` maps world x/z to map space.
+func draw_mine_icons(ci: CanvasItem, tp: Callable, scale: float, clip_c := Vector2.ZERO, clip_r := 1e9) -> void:
+	var M: Dictionary = game.world.mine
+	for ic in M.icons:
+		if not Mine.is_revealed(M, ic.p):
+			continue
+		var p: Vector2 = tp.call(ic.p.x, ic.p.y)
+		if p.distance_to(clip_c) > clip_r:
+			continue
+		match ic.t:
+			"torch":
+				ci.draw_circle(p, 1.7 * scale, Color("#ff9a3a"))
+			"ore":
+				if ic.ref.respawn <= 0.0:
+					var d := 3.0 * scale
+					ci.draw_colored_polygon(PackedVector2Array([p + Vector2(0, -d), p + Vector2(d * 0.7, 0), p + Vector2(0, d), p + Vector2(-d * 0.7, 0)]), Color("#8ad8ff"))
+			"chest":
+				var opened: bool = ic.ref.opened_day == game.day
+				var h := 2.6 * scale
+				ci.draw_rect(Rect2(p - Vector2(h, h * 0.75), Vector2(h * 2.0, h * 1.5)), Color(0, 0, 0, 0.7))
+				ci.draw_rect(Rect2(p - Vector2(h - 1, h * 0.75 - 1), Vector2(h * 2.0 - 2, h * 1.5 - 2)), Color("#7a6a50") if opened else Color("#ffd23a"))
+			"exit":
+				var d := 4.5 * scale
+				var tri := PackedVector2Array([p + Vector2(0, -d), p + Vector2(d, d * 0.8), p + Vector2(-d, d * 0.8)])
+				ci.draw_colored_polygon(tri, Color("#6cff8a"))
+				ci.draw_polyline(tri + PackedVector2Array([tri[0]]), Color(0, 0, 0, 0.8), 1.0, true)
+			"cavein":
+				var d := 3.0 * scale
+				ci.draw_line(p - Vector2(d, d), p + Vector2(d, d), Color("#c8b8a0"), 1.6 * scale)
+				ci.draw_line(p - Vector2(d, -d), p + Vector2(d, -d), Color("#c8b8a0"), 1.6 * scale)
+
+
 func field_corners() -> Array:
 	var fr: Dictionary = game.world.farm.frect
 	return [Vector2(fr.minX + 1.5, fr.minZ + 1.5), Vector2(fr.maxX - 1.5, fr.minZ + 1.5), Vector2(fr.maxX - 1.5, fr.maxZ - 1.5), Vector2(fr.minX + 1.5, fr.maxZ - 1.5)]
@@ -1179,13 +1280,14 @@ shader_type canvas_item;
 uniform vec2 center;
 uniform float yaw;
 uniform float zoom = 0.24;
+uniform vec3 outside = vec3(0.36, 0.34, 0.31);
 void fragment() {
 	vec2 d = UV - 0.5;
 	float r = length(d);
 	vec2 rd = vec2(d.x * cos(yaw) + d.y * sin(yaw), -d.x * sin(yaw) + d.y * cos(yaw));
 	vec2 uv = center + rd * zoom;
 	vec3 c = texture(TEXTURE, uv).rgb;
-	if (uv.x < 0.0 || uv.y < 0.0 || uv.x > 1.0 || uv.y > 1.0) c = vec3(0.36, 0.34, 0.31);
+	if (uv.x < 0.0 || uv.y < 0.0 || uv.x > 1.0 || uv.y > 1.0) c = outside;
 	c *= 1.0 - 0.35 * smoothstep(0.3, 0.45, r);   // soft inner vignette
 	float px = fwidth(r);
 	// bronze rim lit from the top-left, with dark inner and outer lines
@@ -1205,10 +1307,12 @@ void fragment() {
 	func _process(_dt: float) -> void:
 		if game == null or not game.running:
 			return
-		if tex_rect.texture == null:
-			tex_rect.texture = ui.build_map_image()
+		var fr: Dictionary = ui.map_frame()
+		tex_rect.texture = fr.tex
 		var P = game.player
-		mat.set_shader_parameter("center", Vector2((P.position.x + 200.0) / 400.0, (P.position.z + 200.0) / 400.0))
+		mat.set_shader_parameter("center", Vector2((P.position.x - fr.x0) / fr.size, (P.position.z - fr.z0) / fr.size))
+		mat.set_shader_parameter("zoom", fr.r * 2.0 / fr.size)
+		mat.set_shader_parameter("outside", fr.outside)
 		mat.set_shader_parameter("yaw", P.yaw)
 		queue_redraw()
 
@@ -1217,7 +1321,7 @@ void fragment() {
 			return
 		var P = game.player
 		var S := size.x
-		var R := 48.0
+		var R: float = 20.0 if game.in_mine else 48.0
 		var k := S / (R * 2.0)
 		var c := size / 2.0
 		var inner := S * 0.43
@@ -1226,36 +1330,21 @@ void fragment() {
 			# rotate so the view direction points up
 			var a: float = P.yaw
 			return c + Vector2(d.x * cos(a) - d.y * sin(a), d.x * sin(a) + d.y * cos(a)) * k
-		# your field: plot states, plus a pulsing outline (or an edge arrow) until something is planted
 		var gold := Color("#ffd23a")
-		var idle: bool = ui.field_idle()
-		var pulse := 0.5 + 0.5 * sin(Time.get_ticks_msec() * 0.006)
-		var corners := PackedVector2Array()
-		var fc := Vector2.ZERO
-		for q in ui.field_corners():
-			var sp: Vector2 = rot.call(q.x, q.y)
-			corners.append(sp)
-			fc += sp / 4.0
-		if fc.distance_to(c) < inner - 14.0:
-			for pl in game.world.plots:
-				draw_circle(rot.call(pl.pos.x, pl.pos.z), 1.35, ui.plot_color(pl))
-			corners.append(corners[0])
-			draw_polyline(corners, Color(gold, 0.45 + 0.55 * pulse) if idle else Color(gold, 0.5), 1.5 + pulse * 1.5 if idle else 1.2, true)
-		elif idle:
-			var dir := (fc - c).normalized()
-			var tip := c + dir * (inner - 3.0)
-			var side := Vector2(-dir.y, dir.x)
-			var arrow := PackedVector2Array([tip, tip - dir * 11.0 + side * 6.0, tip - dir * 11.0 - side * 6.0])
-			draw_colored_polygon(arrow, Color(gold, 0.6 + 0.4 * pulse))
-			draw_polyline(arrow + PackedVector2Array([arrow[0]]), Color(0, 0, 0, 0.7), 1.0, true)
+		if game.in_mine:
+			_draw_mine(rot, c, inner)
+		else:
+			_draw_field(rot, c, inner)
 		for n in game.npcs:
+			if game.in_mine:
+				break
 			var p: Vector2 = rot.call(n.position.x, n.position.z)
 			if p.distance_to(c) < inner - 4.0:
 				var quest: bool = n.marker_state != ""
 				draw_circle(p, 4.2 if quest else 2.8, Color(0, 0, 0, 0.6))
 				draw_circle(p, 3.2 if quest else 1.9, gold if quest else Color("#f4f0e6"))
 		for e in game.enemies:
-			if e.dead:
+			if e.dead or e.under != game.in_mine:
 				continue
 			var p: Vector2 = rot.call(e.position.x, e.position.z)
 			if p.distance_to(c) < inner - 4.0:
@@ -1274,6 +1363,41 @@ void fragment() {
 		draw_circle(c + nd, 8.5, Color(0.1, 0.07, 0.03))
 		draw_string(ui.title_font, c + nd + Vector2(-5.5, 5), "N", HORIZONTAL_ALIGNMENT_LEFT, -1, 14, gold)
 
+	## edge arrow pointing at something off the minimap
+	func _edge_arrow(c: Vector2, inner: float, target: Vector2, col: Color) -> void:
+		var dir := (target - c).normalized()
+		var tip := c + dir * (inner - 3.0)
+		var side := Vector2(-dir.y, dir.x)
+		var arrow := PackedVector2Array([tip, tip - dir * 11.0 + side * 6.0, tip - dir * 11.0 - side * 6.0])
+		draw_colored_polygon(arrow, col)
+		draw_polyline(arrow + PackedVector2Array([arrow[0]]), Color(0, 0, 0, 0.7), 1.0, true)
+
+	func _draw_mine(rot: Callable, c: Vector2, inner: float) -> void:
+		ui.draw_mine_icons(self, rot, 1.0, c, inner - 4.0)
+		var ex: Vector2 = game.world.mine.exit_pos
+		var ep: Vector2 = rot.call(ex.x, ex.y)
+		if ep.distance_to(c) > inner - 4.0:
+			_edge_arrow(c, inner, ep, Color("#6cff8a", 0.85))
+
+	## your field: plot states, plus a pulsing outline (or an edge arrow) until something is planted
+	func _draw_field(rot: Callable, c: Vector2, inner: float) -> void:
+		var gold := Color("#ffd23a")
+		var idle: bool = ui.field_idle()
+		var pulse := 0.5 + 0.5 * sin(Time.get_ticks_msec() * 0.006)
+		var corners := PackedVector2Array()
+		var fc := Vector2.ZERO
+		for q in ui.field_corners():
+			var sp: Vector2 = rot.call(q.x, q.y)
+			corners.append(sp)
+			fc += sp / 4.0
+		if fc.distance_to(c) < inner - 14.0:
+			for pl in game.world.plots:
+				draw_circle(rot.call(pl.pos.x, pl.pos.z), 1.35, ui.plot_color(pl))
+			corners.append(corners[0])
+			draw_polyline(corners, Color(gold, 0.45 + 0.55 * pulse) if idle else Color(gold, 0.5), 1.5 + pulse * 1.5 if idle else 1.2, true)
+		elif idle:
+			_edge_arrow(c, inner, fc, Color(gold, 0.6 + 0.4 * pulse))
+
 
 class BigMap extends Control:
 	var game
@@ -1289,6 +1413,9 @@ class BigMap extends Control:
 			queue_redraw()
 
 	func _draw() -> void:
+		if game.in_mine:
+			_draw_mine()
+			return
 		var tex: Texture2D = ui.build_map_image()
 		var s := minf(size.x, size.y)
 		draw_texture_rect(tex, Rect2(Vector2.ZERO, Vector2(s, s)), false)
@@ -1340,6 +1467,31 @@ class BigMap extends Control:
 		var P = game.player
 		var c: Vector2 = tp.call(P.position.x, P.position.z)
 		var f := Vector2(-sin(P.yaw), -cos(P.yaw))  # facing direction (map x = world x, map y = world z)
+		var r := Vector2(-f.y, f.x)
+		var pts := PackedVector2Array([c + f * 10.0, c - f * 8.0 + r * 7.0, c - f * 4.0, c - f * 8.0 - r * 7.0])
+		draw_colored_polygon(pts, Color.WHITE)
+		draw_polyline(pts + PackedVector2Array([pts[0]]), Color.BLACK, 1.5)
+
+	func _draw_mine() -> void:
+		var M: Dictionary = game.world.mine
+		var tex: Texture2D = ui.mine_map()
+		var s := minf(size.x, size.y)
+		draw_texture_rect(tex, Rect2(Vector2.ZERO, Vector2(s, s)), false)
+		var k: float = s / M.size
+		var tp := func(x: float, z: float) -> Vector2: return Vector2((x - M.x0) * k, (z - M.z0) * k)
+		ui.draw_mine_icons(self, tp, 1.8)
+		for l in M.labels:
+			if not Mine.is_revealed(M, Vector2(l.x, l.z)):
+				continue
+			var p: Vector2 = tp.call(l.x, l.z)
+			var tw: float = ui.title_font.get_string_size(l.text, HORIZONTAL_ALIGNMENT_LEFT, -1, 14).x
+			var at := p + Vector2(-tw / 2.0, -10)
+			var col := Color("#ff8a6a") if l.text == "Foreman's Hall" else Color("#fff4d0")
+			draw_string_outline(ui.title_font, at, l.text, HORIZONTAL_ALIGNMENT_LEFT, -1, 14, 4, Color(0, 0, 0, 0.85))
+			draw_string(ui.title_font, at, l.text, HORIZONTAL_ALIGNMENT_LEFT, -1, 14, col)
+		var P = game.player
+		var c: Vector2 = tp.call(P.position.x, P.position.z)
+		var f := Vector2(-sin(P.yaw), -cos(P.yaw))
 		var r := Vector2(-f.y, f.x)
 		var pts := PackedVector2Array([c + f * 10.0, c - f * 8.0 + r * 7.0, c - f * 4.0, c - f * 8.0 - r * 7.0])
 		draw_colored_polygon(pts, Color.WHITE)

@@ -39,6 +39,10 @@ var tree_spots: Array = []  # [x, z, size, kind] for the map
 var spawn_point := {}
 var bed_point := {}
 var animated: Array = []
+var mine := {}            # the old silver mine level (see Mine)
+var ores: Array = []
+var mine_surface := {}    # where you stand when climbing out of the mine
+var underground := false
 
 var mats := {}
 var props := PropField.new()
@@ -80,6 +84,7 @@ func generate(p_seed: int, p_quality: String, progress: Callable) -> void:
 		["Hiding treasure...", func(): Wilds.herbs_and_chests(self)],
 		["Painting the sky...", func(): build_sky(); build_lights()],
 		["Placing props...", func(): props.build(self, quality)],
+		["Digging the old mine...", func(): Mine.build(self)],
 	]
 	for i in steps.size():
 		progress.call(steps[i][0], float(i) / steps.size())
@@ -844,6 +849,12 @@ func building_at(x: float, z: float):
 # ================================================================ per frame
 func update(dt: float, hours: float, player_pos: Vector3) -> void:
 	t += dt
+	if underground:
+		inside = null
+		lantern.position = player_pos + Vector3(0, 1.8, 0)
+		lantern.light_energy = 2.4
+		Mine.update(self, dt, player_pos)
+		return
 	var a := (hours - 6.0) / 24.0 * TAU
 	var sd := Vector3(cos(a) * 0.9, sin(a), 0.42).normalized()
 	var day := U.smoothstep(-0.15, 0.25, sd.y)
@@ -883,3 +894,41 @@ func update(dt: float, hours: float, player_pos: Vector3) -> void:
 		water_mat.uv1_offset = Vector3(t * 0.02, t * 0.013, 0)
 	for f in animated:
 		f.call(dt, t)
+
+
+## Switch between the surface and the mine: hide whichever isn't in use and swap the lighting.
+func set_underground(on: bool) -> void:
+	underground = on
+	for c in get_children():
+		if c == mine.root:
+			(c as Node3D).visible = on
+		elif c is Light3D or c is WorldEnvironment or c is CollisionObject3D:
+			continue
+		elif c is Node3D:
+			(c as Node3D).visible = not on
+	if on:
+		sun.light_energy = 0.0
+		interior_light.light_energy = 0.0
+		camp_light.light_energy = 0.0
+		lantern.omni_range = 13.0
+		env.background_mode = Environment.BG_COLOR
+		env.background_color = Color(0.012, 0.01, 0.008)
+		env.ambient_light_source = Environment.AMBIENT_SOURCE_COLOR
+		env.ambient_light_color = Color("#56505e")
+		env.ambient_light_energy = 1.0
+		env.reflected_light_source = Environment.REFLECTION_SOURCE_DISABLED
+		env.fog_light_color = Color("#0d0a08")
+		env.fog_depth_begin = 5.0
+		env.fog_depth_end = 34.0
+		env.fog_aerial_perspective = 0.0
+		Mine.reveal(mine, mine.entry_pos.x, mine.entry_pos.z, 8.0)
+	else:
+		lantern.omni_range = 16.0
+		env.background_mode = Environment.BG_SKY
+		env.ambient_light_source = Environment.AMBIENT_SOURCE_SKY
+		env.reflected_light_source = Environment.REFLECTION_SOURCE_SKY
+		env.fog_depth_begin = 60.0
+		env.fog_depth_end = 240.0
+		env.fog_aerial_perspective = 0.4
+		for l in mine.lights:
+			(l as OmniLight3D).light_energy = 0.0

@@ -28,6 +28,7 @@ var autosave_t := 60.0
 var marker_t := 0.0
 var well_t := 0.0
 var clock := 0.0
+var in_mine := false
 
 
 func setup(p_seed: int, save_data: Dictionary, p_settings: Dictionary, p_version: String, progress: Callable) -> void:
@@ -169,7 +170,7 @@ func _process(dt: float) -> void:
 		if not e.dead and e.state == "chase" and e.position.distance_to(player.position) < 25.0:
 			danger = true
 			break
-	audio.update_music(dt, "danger" if danger else ("night" if world.night > 0.6 else "day"))
+	audio.update_music(dt, "danger" if danger else ("night" if world.night > 0.6 or in_mine else "day"))
 	autosave_t -= dt
 	if autosave_t <= 0.0:
 		autosave_t = 60.0
@@ -198,7 +199,7 @@ func _update_focus() -> void:
 	var best = null
 	var bs := 1e9
 	for it in world.interactables:
-		if it.type == "herb" and it.respawn > 0.0:
+		if (it.type == "herb" or it.type == "ore") and it.respawn > 0.0:
 			continue
 		var d3: Vector3 = it.pos - P.position
 		var d := Vector2(d3.x, d3.z).length()
@@ -284,9 +285,10 @@ func interact() -> void:
 			else:
 				it.opened_day = day
 				_chest_visual(it)
-				var gold := randi_range(15, 49)
+				var gr: Array = it.get("gold", [15, 49])
+				var gold := randi_range(gr[0], gr[1])
 				P.gold += gold
-				var pool := ["hp_potion", "mp_potion", "old_coin", "hp_potion", "leather", "hunting_bow", "iron_sword", "tome_thorns", "tome_sparks", "pumpkin_seed"]
+				var pool: Array = it.get("pool", ["hp_potion", "mp_potion", "old_coin", "hp_potion", "leather", "hunting_bow", "iron_sword", "tome_thorns", "tome_sparks", "pumpkin_seed"])
 				var item: String = pool[randi() % pool.size()]
 				P.add_item(item, 1)
 				audio.play("chest")
@@ -296,7 +298,60 @@ func interact() -> void:
 		"crypt":
 			ui.toast("The crypt is sealed by an ancient ward. (Coming in a future update)", Color("#66ffcc"))
 		"mine":
-			ui.banner("The Collapsed Mine", "Rubble blocks the way. A new region will open here in a future update.")
+			enter_mine()
+		"mine_exit":
+			leave_mine()
+		"cave_in":
+			ui.banner("A Fresh Cave-in", "Rubble chokes the tunnel. The mine goes deeper - a new level will open here in a future update.")
+		"ore":
+			var n := randi_range(1, 2)
+			P.add_item("silver_ore", n)
+			it.respawn = 300.0
+			it.node.visible = false
+			P.gain_xp("melee", 4)
+			audio.play("hit")
+			combat.burst(it.pos, Color("#bfe4ff"), 30, 2.5, 0.8, 8.0, 0.0, 0.08, false)
+			ui.toast("Mined %d Silver Ore 🪨" % n, Color("#bfe4ff"))
+			check_collect_quests()
+
+
+# ================================================================ the mine
+func enter_mine() -> void:
+	if in_mine:
+		return
+	_set_mine(true)
+	var M: Dictionary = world.mine
+	player.position = M.entry_pos
+	player.velocity = Vector3.ZERO
+	player.yaw = M.entry_yaw
+	player.pitch = 0.0
+	audio.play("step_wood")
+	var q: Dictionary = quests.get("mine", {})
+	ui.banner("The Old Silver Mine", "Cold air rises from the dark..." if q.get("state", "") != "available" else "The Gate Guard might know what lurks down here")
+	save_game(true)
+
+
+func leave_mine() -> void:
+	if not in_mine:
+		return
+	_set_mine(false)
+	var ms: Dictionary = world.mine_surface
+	player.position = ms.pos
+	player.velocity = Vector3.ZERO
+	player.yaw = ms.yaw
+	player.pitch = 0.0
+	audio.play("step_wood")
+	ui.toast("Back in the fresh air", Color("#cfe8ff"))
+	save_game(true)
+
+
+func _set_mine(on: bool) -> void:
+	in_mine = on
+	world.set_underground(on)
+	farm.visible = not on
+	for n in npcs:
+		n.visible = false
+	ui.dirty = true
 
 
 func _chest_visual(it: Dictionary) -> void:
@@ -314,7 +369,7 @@ func sleep() -> void:
 
 
 func _update_herbs(dt: float) -> void:
-	for h in world.herbs:
+	for h in world.herbs + world.ores:
 		if h.respawn > 0.0:
 			h.respawn -= dt
 			if h.respawn <= 0.0:
@@ -472,8 +527,8 @@ func on_kill(e, skill: String) -> void:
 			q.progress += 1
 			if q.progress <= qd.count:
 				ui.toast("%s: %d/%d" % [qd.title, q.progress, qd.count], Color("#ffd23a"))
-	if d.get("boss", false):
-		ui.banner("The Warchief has fallen!", "Return to the Mayor with the news")
+	if d.has("fallen"):
+		ui.banner(d.fallen[0], d.fallen[1])
 	check_collect_quests()
 
 
@@ -482,6 +537,8 @@ func on_death() -> void:
 	var lost := int(player.gold * 0.1)
 	ui.show_death("You lost %d gold. You'll wake up at home." % lost)
 	await get_tree().create_timer(3.5).timeout
+	if in_mine:
+		_set_mine(false)
 	player.gold -= lost
 	player.dead = false
 	player.hp = player.max_hp
@@ -508,7 +565,15 @@ func save_game(silent := false) -> void:
 	var chests: Array = []
 	for c in world.chests:
 		chests.append(c.opened_day)
-	var data := {"v": 2, "seed": seed_value, "day": day, "hours": hours, "player": player.serialize(), "quests": quests, "plots": plots, "chests": chests, "saved_at": Time.get_unix_time_from_system()}
+	var pd := player.serialize()
+	if in_mine:
+		# saved games always resume on the surface, at the mine entrance
+		var ms: Dictionary = world.mine_surface
+		pd.x = ms.pos.x
+		pd.y = ms.pos.y
+		pd.z = ms.pos.z
+		pd.yaw = ms.yaw
+	var data := {"v": 2, "seed": seed_value, "day": day, "hours": hours, "player": pd, "quests": quests, "plots": plots, "chests": chests, "mine_map": Marshalls.raw_to_base64(world.mine.revealed), "saved_at": Time.get_unix_time_from_system()}
 	var f := FileAccess.open(SAVE_PATH, FileAccess.WRITE)
 	if f:
 		f.store_string(JSON.stringify(data))
@@ -536,6 +601,9 @@ func _load(d: Dictionary) -> void:
 	for i in mini(chests.size(), world.chests.size()):
 		world.chests[i].opened_day = int(chests[i])
 		_chest_visual(world.chests[i])
+	var rev := Marshalls.base64_to_raw(d.get("mine_map", ""))
+	if rev.size() == (world.mine.revealed as PackedByteArray).size():
+		world.mine.revealed = rev
 
 
 static func load_data() -> Dictionary:

@@ -293,7 +293,7 @@ func _physics_process(dt: float) -> void:
 		bob += dt * moving * 1.9
 		if floori(pb / PI) != floori(bob / PI):
 			game.audio.play("step_wood" if W.inside else ("step_water" if in_water else "step"))
-	in_village = r < W.fence_r - 0.5
+	in_village = r < W.fence_r - 0.5 and not game.in_mine
 	_update_camera(moving)
 	if not frozen and inp.attack:
 		primary()

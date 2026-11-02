@@ -96,7 +96,9 @@ func _physics_process(dt: float) -> void:
 	var P: Vector3 = game.player.global_position
 	var dp := Vector2(P.x - position.x, P.z - position.z).length()
 	var far := dp > 90.0
-	visible = not far
+	visible = not far and not game.in_mine
+	if game.in_mine:
+		return
 	actor.anim.active = dp < 60.0
 	if far and not wander:
 		return
