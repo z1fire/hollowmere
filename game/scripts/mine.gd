@@ -501,7 +501,11 @@ static func _dress(W: World, M: Dictionary, R: RandomNumberGenerator) -> void:
 				_spawn(W, M, R, rm, "miner", 1)
 			"cache":
 				_webs(M, batch, walls, 4, R)
-				var p := _spot(M, R, rm, 0.4, 1.8)
+				var p := _spot(M, R, rm, 0.6, 1.8, 0.7)
+				if p == Vector2.INF:
+					p = _spot(M, R, rm, 0.4, 1.8)
+				if p == Vector2.INF:
+					p = c
 				_chest(W, M, p, R.randf_range(0, TAU), 1.1, ["hp_potion", "mp_potion", "old_coin", "chainmail", "longbow", "tome_fireball", "war_axe", "silver_ore"], [40, 95])
 				_scatter(M, B, R, rm, ["box_small", "barrel_small", "box_large"], 3)
 				_spawn(W, M, R, rm, "cave_spider", 2)
@@ -510,6 +514,8 @@ static func _dress(W: World, M: Dictionary, R: RandomNumberGenerator) -> void:
 				_gems(M, batch, walls, 4, R)
 				_hall(W, M, B, R, rm)
 				var sp := _spot(M, R, rm, 0.3, 3.0)
+				if sp == Vector2.INF:
+					sp = c
 				W.spawns.append({"type": "foreman", "x": sp.x, "z": sp.y, "y": floor_y(M, sp.x, sp.y) + 0.2, "leash": 16.0, "under": true})
 				_spawn(W, M, R, rm, "miner", 2)
 			"cavein":
@@ -563,13 +569,24 @@ static func _walls_near(M: Dictionary, rm: Dictionary) -> Array:
 
 
 ## random open floor point inside a cavern
-static func _spot(M: Dictionary, R: RandomNumberGenerator, rm: Dictionary, frac: float, clear: float) -> Vector2:
-	for k in 50:
+static func _spot(M: Dictionary, R: RandomNumberGenerator, rm: Dictionary, frac: float, clear: float, rad := 0.0) -> Vector2:
+	for k in 80:
 		var a := R.randf_range(0, TAU)
 		var p: Vector2 = rm.c + Vector2(sin(a), cos(a)) * sqrt(R.randf()) * rm.r * frac
-		if open_at(M, p.x, p.y) > clear:
+		if open_at(M, p.x, p.y) > clear and (rad <= 0.0 or route_clear(M, p, rad)):
 			return p
-	return rm.c
+	return Vector2.INF
+
+
+## solid things must keep out of the walking lane along every tunnel route (which runs
+## through each cavern's centre to its tunnel mouths), so the way on is never blocked
+const LANE := 1.25
+
+static func route_clear(M: Dictionary, p: Vector2, rad: float) -> bool:
+	for t in M.tunnels:
+		if _seg_dist(p, t.pts) < rad + LANE:
+			return false
+	return true
 
 
 ## a spot on the cave wall at height `h` above the floor: [surface point, normal into the cave]
@@ -584,6 +601,8 @@ static func _wall_at(M: Dictionary, w: Dictionary, h: float) -> Array:
 static func _spawn(W: World, M: Dictionary, R: RandomNumberGenerator, rm: Dictionary, type: String, count: int) -> void:
 	for i in count:
 		var p := _spot(M, R, rm, 0.6, 1.4)
+		if p == Vector2.INF:
+			p = rm.c
 		W.spawns.append({"type": type, "x": p.x, "z": p.y, "y": floor_y(M, p.x, p.y) + 0.2, "leash": 12.0, "under": true})
 
 
@@ -597,10 +616,12 @@ static func _scatter(M: Dictionary, B: Builder, R: RandomNumberGenerator, rm: Di
 			# bigger things sit against the walls, out of the way
 			var w: Dictionary = U.pick(R, walls)
 			p = (w.p as Vector2) + (w.n as Vector2) * R.randf_range(1.1, 1.6)
-			if open_at(M, p.x, p.y) < 0.8:
+			if open_at(M, p.x, p.y) < 0.8 or not route_clear(M, p, 0.8):
 				continue
 		else:
 			p = _spot(M, R, rm, 0.85, 0.6)
+			if p == Vector2.INF:
+				continue
 		B.prop(bundle, name, p.x, floor_y(M, p.x, p.y), p.y, R.randf_range(0, TAU), R.randf_range(0.9, 1.15), {"collide": not small})
 
 
@@ -656,8 +677,10 @@ static func _supports(W: World, M: Dictionary, batch: MeshBatch, t: Dictionary) 
 				continue
 			var nrm := Vector2(dir.y, -dir.x)
 			var off: float = t.hw - 0.3
-			while off > 0.6 and (open_at(M, p.x + nrm.x * off, p.y + nrm.y * off) < 0.2 or open_at(M, p.x - nrm.x * off, p.y - nrm.y * off) < 0.2):
+			while off > 0.85 and (open_at(M, p.x + nrm.x * off, p.y + nrm.y * off) < 0.2 or open_at(M, p.x - nrm.x * off, p.y - nrm.y * off) < 0.2):
 				off -= 0.15
+			if off <= 0.85:
+				continue
 			var fy := floor_y(M, p.x, p.y)
 			var h := minf(ceil_y(M, p.x, p.y) - fy - 0.15, 3.1)
 			var n3 := Vector3(nrm.x, 0, nrm.y)
@@ -749,7 +772,12 @@ static func _entry(W: World, M: Dictionary, B: Builder, batch: MeshBatch, rm: Di
 	M.entry_pos = Vector3(start.x, floor_y(M, start.x, start.y) + 0.3, start.y)
 	M.entry_yaw = atan2(-dir.x, -dir.y)
 	# an old mine cart on the rails
-	var cp: Vector2 = c + dir * (rm.r * 0.6)
+	var cp: Vector2 = c + dir * (rm.r * 0.3)
+	for k in 12:
+		var cand: Vector2 = c + dir * (rm.r * 0.3) + Vector2(side.x, side.z) * (rm.r * (0.62 - k * 0.03)) * (1.0 if k % 2 == 0 else -1.0)
+		if open_at(M, cand.x, cand.y) > 1.0 and route_clear(M, cand, 0.9):
+			cp = cand
+			break
 	var cy := floor_y(M, cp.x, cp.y)
 	var cb := B.sub(cp.x, cp.y, atan2(dir.x, dir.y), cy)
 	cb.box("metal", 0, 0.62, 0, 0.95, 0.6, 1.35, "#5a5048", true)
@@ -761,7 +789,9 @@ static func _entry(W: World, M: Dictionary, B: Builder, batch: MeshBatch, rm: Di
 
 
 static func _camp(W: World, M: Dictionary, B: Builder, R: RandomNumberGenerator, rm: Dictionary) -> void:
-	var c := _spot(M, R, rm, 0.25, 2.2)
+	var c := _spot(M, R, rm, 0.6, 2.2, 1.0)
+	if c == Vector2.INF:
+		return
 	var fy := floor_y(M, c.x, c.y)
 	var a := R.randf_range(0, TAU)
 	B.prop("dungeon", "table_medium", c.x, fy, c.y, a, 1.0)
@@ -770,7 +800,9 @@ static func _camp(W: World, M: Dictionary, B: Builder, R: RandomNumberGenerator,
 		var sa := a + k * 2.1
 		B.prop("dungeon", "stool", c.x + sin(sa) * 1.1, fy, c.y + cos(sa) * 1.1, sa, 1.0, {"collide": false})
 	_scatter(M, B, R, rm, ["bed_frame", "barrel_large", "crates_stacked", "keg", "box_stacked"], 4)
-	var p := _spot(M, R, rm, 0.7, 1.6)
+	var p := _spot(M, R, rm, 0.7, 1.6, 0.7)
+	if p == Vector2.INF:
+		return
 	_chest(W, M, p, R.randf_range(0, TAU), 1.1, ["hp_potion", "stew", "bread", "silver_ore", "old_coin", "hunting_bow", "leather", "tome_sparks"], [25, 60])
 
 
@@ -779,14 +811,21 @@ static func _hall(W: World, M: Dictionary, B: Builder, R: RandomNumberGenerator,
 	for k in 4:
 		var a := k * TAU / 4.0 + PI / 4.0
 		var p: Vector2 = c + Vector2(sin(a), cos(a)) * rm.r * 0.55
-		if open_at(M, p.x, p.y) > 1.0:
+		if open_at(M, p.x, p.y) > 1.0 and route_clear(M, p, 0.8):
 			B.prop("dungeon", "column", p.x, floor_y(M, p.x, p.y), p.y, a, 1.3)
 	# the foreman's hoard against the far wall
 	var walls := _walls_near(M, rm)
-	var w: Dictionary = walls[R.randi_range(0, walls.size() - 1)] if walls.size() > 0 else {"p": c, "n": Vector2(1, 0)}
-	var hp: Vector2 = (w.p as Vector2) + (w.n as Vector2) * 2.2
-	if open_at(M, hp.x, hp.y) < 1.0:
-		hp = c
+	var w: Dictionary = {"p": c, "n": Vector2(1, 0)}
+	var hp := c
+	for k in 40:
+		if walls.is_empty():
+			break
+		var cw: Dictionary = walls[R.randi_range(0, walls.size() - 1)]
+		var cp: Vector2 = (cw.p as Vector2) + (cw.n as Vector2) * 2.2
+		if open_at(M, cp.x, cp.y) >= 1.0 and route_clear(M, cp, 1.0):
+			w = cw
+			hp = cp
+			break
 	var face := atan2((w.n as Vector2).x, (w.n as Vector2).y)
 	_chest(W, M, hp, face, 1.45, ["plate", "longbow", "tome_fireball", "war_axe", "knight_blade", "mage_robe"], [120, 200])
 	for k in 3:

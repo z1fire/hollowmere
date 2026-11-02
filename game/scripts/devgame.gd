@@ -155,6 +155,8 @@ func _run() -> void:
 		await physics_frame
 	check("standing on the mine floor (y %.1f)" % P.position.y, P.is_on_floor() and absf(P.position.y - M.entry_pos.y) < 1.5)
 	await shot("mine_entry", 10)
+	var blocked: Array = load("res://scripts/devnav.gd").check(game.world)
+	check("every cavern reachable on foot %s" % [blocked], blocked.is_empty())
 	for e in game.enemies:
 		if e.under and e.type != "foreman":
 			e.die()
